@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [] };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -512,6 +512,133 @@
     URL.revokeObjectURL(a.href);
   }
 
+  const FORN_CAMPOS = ["doc", "nome", "emp", "liq", "pago", "a_pagar", "qtd", "primeira", "ultima", "slugs", "por_unidade", "por_natureza", "por_funcao", "por_entidade", "empenhos_top"];
+
+  function fornObj(row, campos) {
+    const out = {};
+    (campos || FORN_CAMPOS).forEach((k, i) => { out[k] = row[i]; });
+    return out;
+  }
+
+  async function ensureFornecedores() {
+    if (state.fornecedores) return state.fornecedores;
+    state.fornecedores = await json("fornecedores");
+    return state.fornecedores;
+  }
+
+  function initFornecedoresFiltros() {
+    const busca = document.getElementById("forn-busca");
+    const tipo = document.getElementById("forn-tipo");
+    const ordem = document.getElementById("forn-ordem");
+    if (!busca) return;
+    busca.oninput = () => { state.fornLimite = 100; renderFornecedores(); };
+    tipo.onchange = () => { state.fornLimite = 100; renderFornecedores(); };
+    ordem.onchange = () => renderFornecedores();
+    document.getElementById("forn-carregar").onclick = () => { state.fornLimite += 100; renderFornecedores(); };
+    document.getElementById("forn-exportar").onclick = () => exportarFornecedoresCSV(state.fornFiltrados);
+  }
+
+  function filtrarFornecedores(dados) {
+    const q = norm(document.getElementById("forn-busca").value).trim();
+    const tipo = document.getElementById("forn-tipo").value;
+    const ordem = document.getElementById("forn-ordem").value;
+    const campos = dados.meta?.campos || FORN_CAMPOS;
+    return dados.fornecedores.map((r) => fornObj(r, campos)).filter((f) => {
+      if (tipo === "pj" && !f.doc) return false;
+      if (tipo === "pf" && f.doc) return false;
+      if (q && !norm(`${f.nome} ${f.doc}`).includes(q)) return false;
+      return true;
+    }).sort((a, b) => Number(b[ordem] || 0) - Number(a[ordem] || 0));
+  }
+
+  async function renderFornecedores() {
+    const tbody = document.querySelector("#tabela-fornecedores tbody");
+    if (!tbody) return;
+    const req = ++state.fornReq;
+    tbody.innerHTML = `<tr><td colspan="8" class="nota">Carregando fornecedores…</td></tr>`;
+    try {
+      const dados = await ensureFornecedores();
+      if (req !== state.fornReq) return;
+      const rows = filtrarFornecedores(dados);
+      state.fornFiltrados = rows;
+      const page = rows.slice(0, state.fornLimite);
+      const meta = dados.meta;
+      document.getElementById("forn-kpis").innerHTML = [
+        card("Fornecedores com CNPJ", String(meta.total_pj), `${meta.total_fornecedores} linhas (PF agregada)`, "hero"),
+        card("Empenhado a fornecedores", money(meta.total_emp), `de ${money(meta.total_geral)} no total`),
+        card("Pago a fornecedores", money(meta.total_pago), `${percent(meta.total_emp ? meta.total_pago / meta.total_emp : 0)} do empenhado`),
+        card("Top 10", percent(meta.top10_share), "concentração do empenhado", meta.top10_share > 0.6 ? "alert" : ""),
+        card("HHI", Number(meta.hhi || 0).toFixed(0), "0–10.000; maior = concentração"),
+        card("Excluídos", money(meta.excluidos), "folha, encargos e entes públicos"),
+      ].join("");
+      tbody.innerHTML = page.map((f, i) => `<tr class="clickable" data-forn="${f.doc || "pf:" + i}">
+        <td class="forn-nome" title="${esc(f.nome)}">${esc(f.nome)}</td>
+        <td>${f.doc ? esc(fmtDoc(f.doc)) : "—"}</td>
+        <td class="num">${money(f.emp)}</td><td class="num">${money(f.liq)}</td>
+        <td class="num">${money(f.pago)}</td><td class="num">${money(f.a_pagar)}</td>
+        <td class="num">${f.qtd}</td><td>${esc(f.ultima)}</td>
+      </tr>`).join("") || `<tr><td colspan="8" class="nota">Nenhum fornecedor com esse filtro.</td></tr>`;
+      document.getElementById("forn-nota").textContent = `${rows.length} fornecedor(es) · exibindo ${page.length} · até ${meta.ate || "—"}`;
+      document.getElementById("forn-mais").hidden = page.length >= rows.length;
+      tbody.onclick = (ev) => {
+        const tr = ev.target.closest("tr[data-forn]");
+        if (!tr) return;
+        const key = tr.dataset.forn;
+        const forn = key.startsWith("pf:") ? rows.find((x) => !x.doc) : rows.find((x) => x.doc === key);
+        if (forn) abrirFornecedor(forn);
+      };
+    } catch (e) {
+      if (req !== state.fornReq) return;
+      tbody.innerHTML = `<tr><td colspan="8" class="nota">Não foi possível carregar: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function tabelaForn(titulo, rows, cols) {
+    if (!rows || !rows.length) return `<div><h3>${esc(titulo)}</h3><p class="nota">Sem dados.</p></div>`;
+    return `<div><h3>${esc(titulo)}</h3><div class="table-wrap"><table class="mini"><thead><tr>${cols.map((c) => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c, i) => `<td class="${c.num ? "num" : ""}">${c.html ? String(r[i] ?? "") : (c.money ? money(r[i]) : esc(r[i] ?? "—"))}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+  }
+
+  function abrirFornecedor(f) {
+    document.getElementById("modal-title").textContent = f.nome + (f.doc ? ` · ${fmtDoc(f.doc)}` : "");
+    const ent = tabelaForn("Por entidade", f.por_entidade.map((r) => [r[1], r[2], r[3], r[4]]), [
+      { label: "Entidade" }, { label: "Empenhado", num: true, money: true },
+      { label: "Liquidado", num: true, money: true }, { label: "Pago", num: true, money: true },
+    ]);
+    const orgao = tabelaForn("Por órgão", (f.por_unidade || []).map((r) => [r[1], r[2]]), [
+      { label: "Órgão" }, { label: "Empenhado", num: true, money: true },
+    ]);
+    const nat = tabelaForn("Por natureza", (f.por_natureza || []).map((r) => [`${r[0]} · ${r[1]}`, r[2]]), [
+      { label: "Natureza" }, { label: "Empenhado", num: true, money: true },
+    ]);
+    const fun = tabelaForn("Por função", f.por_funcao, [
+      { label: "Função" }, { label: "Empenhado", num: true, money: true },
+    ]);
+    const emps = (f.empenhos_top || []).map((r) => [
+      r[2], r[1], r[3], r[4], `<a href="?ent=${encodeURIComponent(r[0])}&emp=${encodeURIComponent(r[1])}#empenhos">abrir</a>`,
+    ]);
+    const top = tabelaForn("Maiores empenhos", emps, [
+      { label: "Data" }, { label: "Empenho" }, { label: "Empenhado", num: true, money: true },
+      { label: "Pago", num: true, money: true }, { label: "Detalhe", html: true },
+    ]);
+    document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(f.primeira)} a ${esc(f.ultima)} · ${f.qtd} empenho(s) · ${esc((f.slugs || []).join(", "))}</p>
+      <div class="grid">${card("Empenhado", money(f.emp), "", "hero")}${card("Liquidado", money(f.liq))}${card("Pago", money(f.pago))}${card("A pagar", money(f.a_pagar), "", "alert")}</div>
+      ${ent}${orgao}${nat}${fun}${top}`;
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function exportarFornecedoresCSV(rows) {
+    const header = ["fornecedor", "cnpj", "empenhado", "liquidado", "pago", "a_pagar", "empenhos", "primeiro", "ultimo"];
+    const lines = [header, ...rows.map((f) => [f.nome, f.doc, f.emp, f.liq, f.pago, f.a_pagar, f.qtd, f.primeira, f.ultima])];
+    const csv = lines.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `painel_fiscal_fornecedores_${state.meta.ano}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -697,6 +824,7 @@
     document.querySelectorAll(".tab").forEach((el) => { el.hidden = el.id !== id; });
     document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === id));
     if (id === "empenhos") renderEmpenhos();
+    if (id === "fornecedores") renderFornecedores();
   }
 
   async function init() {
@@ -711,6 +839,7 @@
       renderGastosFiltros();
       renderGastos();
       initEmpenhosFiltros();
+      initFornecedoresFiltros();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
@@ -727,6 +856,14 @@
       renderSobre();
       document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações + empenhos) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
       showTab();
+      const entParam = params.get("ent");
+      if (entParam) {
+        const sel = document.getElementById("emp-entidade");
+        if ([...sel.options].some((o) => o.value === entParam)) {
+          sel.value = entParam;
+          sel.onchange();
+        }
+      }
       const empParam = params.get("emp");
       if (empParam) {
         if (!location.hash) location.hash = "#empenhos";

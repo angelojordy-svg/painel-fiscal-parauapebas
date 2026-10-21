@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021122315">
+<link rel="stylesheet" href="assets/app.css?v=20261021124328">
 </head>
 <body>
 <header>
@@ -25,6 +25,7 @@
   <a href="#despesas" data-tab="despesas">Demonstrativo</a>
   <a href="#gastos" data-tab="gastos">Gastos</a>
   <a href="#empenhos" data-tab="empenhos">Empenhos</a>
+  <a href="#fornecedores" data-tab="fornecedores">Fornecedores</a>
   <a href="#conferencia" data-tab="conferencia">Conferência</a>
   <a href="#sobre" data-tab="sobre">Sobre os dados</a>
 </nav>
@@ -244,6 +245,47 @@
     </section>
   </section>
 
+  <section id="fornecedores" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Buscar
+        <input id="forn-busca" type="search" placeholder="fornecedor ou CNPJ">
+      </label>
+      <label>Tipo
+        <select id="forn-tipo">
+          <option value="">Todos</option>
+          <option value="pj">Com CNPJ</option>
+          <option value="pf">Pessoas físicas</option>
+        </select>
+      </label>
+      <label>Ordenar por
+        <select id="forn-ordem">
+          <option value="emp">Empenhado</option>
+          <option value="pago">Pago</option>
+        </select>
+      </label>
+      <button id="forn-exportar" class="btn ghost" type="button">Exportar CSV</button>
+      <span id="forn-nota" class="nota"></span>
+    </div>
+
+    <div id="forn-kpis" class="grid"></div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Ranking de fornecedores</h2>
+        <span class="nota">Clique numa linha para abrir o dossiê · sem folha/encargos e sem entes públicos</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-fornecedores" class="mini">
+          <thead>
+            <tr><th>Fornecedor</th><th>CNPJ</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">A pagar</th><th class="num">Empenhos</th><th>Último</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="forn-mais" class="emp-mais" hidden><button id="forn-carregar" class="btn ghost" type="button">Carregar mais</button></div>
+    </section>
+  </section>
+
   <section id="conferencia" class="tab" hidden>
     <div id="conferencia-kpis" class="grid"></div>
     <div class="panel">
@@ -281,6 +323,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021122315" defer></script>
+<script src="assets/app.js?v=20261021124328" defer></script>
 </body>
 </html>
