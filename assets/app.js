@@ -100,15 +100,14 @@
     tbody.innerHTML = rows.map((n) => {
       const alerta = (n.alertas || []).join("; ");
       return `<tr>
-        <td class="cod">${esc(n.cod)}</td><td>${esc(n.nome)}</td>
+        <td class="cod" title="${esc(alerta)}">${esc(n.cod)}${alerta ? ` <span class="dot" title="${esc(alerta)}">!</span>` : ""}</td><td>${esc(n.nome)}</td>
         <td class="num">${money(n.dot_atu)}</td><td class="num">${money(n.emp_ytd)}</td>
         <td class="num">${money(n.liq_ytd)}</td><td class="num">${money(n.pago_ytd)}</td>
         <td class="num">${percent(n.exec)}</td><td class="num">${money(n.saldo)}</td>
         <td class="num">${money(n.proj_ago)}</td><td class="num">${money(n.proj_set)}</td>
         <td class="num ${n.saldo_est_ago < -0.005 ? "neg" : ""}">${money(n.saldo_est_ago)}</td>
-        <td>${alerta ? `<span class="pill warn">${esc(alerta)}</span>` : "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="12" class="nota">Nenhuma natureza com esse filtro.</td></tr>`;
+    }).join("") || `<tr><td colspan="11" class="nota">Nenhuma natureza com esse filtro.</td></tr>`;
   }
 
   function exportarCSV() {
