@@ -54,7 +54,7 @@
       ? `<p class="nota">${alertas.length} ponto(s) de atenção. Mostrando os 8 primeiros.</p><div class="alertas-list"><ul>${alertas.slice(0, 8).map((a) => `<li><b>${esc(a.nome)}</b> · ${esc(a.cod)} ${esc(a.natureza)}: ${esc(a.alertas.join("; "))}</li>`).join("")}</ul></div>`
       : `<p class="pill ok">Nenhum ponto de atenção.</p>`;
 
-    bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => `${r.entidade || ""} ? ${r.nome}`);
+    bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => r.entidade === "Prefeitura" ? r.nome : `${r.entidade || ""} - ${r.nome}`);
     bars(document.getElementById("top-naturezas"), p.top_naturezas || [], "liq", (r) => `${r.cod} · ${r.nome}`);
 
     const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq]));
