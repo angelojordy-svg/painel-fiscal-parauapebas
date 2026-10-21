@@ -54,10 +54,12 @@
       ? `<p class="nota">${alertas.length} ponto(s) de atenção. Mostrando os 8 primeiros.</p><div class="alertas-list"><ul>${alertas.slice(0, 8).map((a) => `<li><b>${esc(a.nome)}</b> · ${esc(a.cod)} ${esc(a.natureza)}: ${esc(a.alertas.join("; "))}</li>`).join("")}</ul></div>`
       : `<p class="pill ok">Nenhum ponto de atenção.</p>`;
 
-    bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => `${r.nome}`);
+    bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => `${r.entidade || ""} ? ${r.nome}`);
     bars(document.getElementById("top-naturezas"), p.top_naturezas || [], "liq", (r) => `${r.cod} · ${r.nome}`);
 
     const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq]));
+    const ent = p.entidades || [];
+    document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dota??o</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provis?ria</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
     document.getElementById("mensal").innerHTML = (p.mensal || []).map((m) => {
       const he = Math.max(1, (m.emp / max) * 100);
       const hl = Math.max(1, (m.liq / max) * 100);
@@ -68,8 +70,10 @@
   function renderDespesas() {
     const d = state.despesas;
     const sel = document.getElementById("filtro-unidade");
-    sel.innerHTML = d.unidades.map((u) => `<option value="${u.unid}">${esc(u.nome)}</option>`).join("");
-    const preferida = d.unidades.find((u) => u.unid === 3)?.unid ?? d.unidades[0]?.unid;
+    const grupos = {};
+    for (const u of d.unidades) (grupos[u.entidade] ||= []).push(u);
+    sel.innerHTML = Object.entries(grupos).map(([nome, us]) => `<optgroup label="${esc(nome)}">${us.map((u) => `<option value="${u.unid}">${esc(u.nome)}</option>`).join("")}</optgroup>`).join("");
+    const preferida = d.unidades.find((u) => u.unid === 3 && u.slug === "prefeitura")?.unid ?? d.unidades[0]?.unid;
     state.unidade = preferida;
     sel.value = String(preferida);
     sel.onchange = () => { state.unidade = Number(sel.value); renderDespesasUnit(); };
@@ -136,9 +140,9 @@
       card("Liquidações", money(ts.portal), `base ${c.raw || "—"} · cortes ${c.cortes?.["09/2026"] || "—"} e ${c.cortes?.["10/2026"] || "—"}`),
       card("Portais", "2 competências", "set e out/2026; out é parcial"),
     ].join("");
-    const rows = (c.linhas || []).slice().sort((a, b) => a.unid - b.unid || a.competencia.localeCompare(b.competencia));
+    const rows = (c.linhas || []).slice().sort((a, b) => (a.entidade || "").localeCompare(b.entidade || "") || a.unid - b.unid || a.competencia.localeCompare(b.competencia));
     document.querySelector("#tabela-conferencia tbody").innerHTML = rows.map((r) => `<tr>
-      <td>${esc(r.nome)}</td><td>${esc(r.competencia)}</td>
+      <td>${esc(r.entidade || "")}</td><td>${esc(r.nome)}</td><td>${esc(r.competencia)}</td>
       <td class="num">${money(r.calc)}</td><td class="num">${money(r.portal)}</td>
       <td class="num ${Math.abs(r.diff) > 0.01 ? "bad" : "ok"}">${money(r.diff)}</td>
       <td><span class="pill ${r.status === "ok" ? "ok" : "bad"}">${esc(r.status)}</span></td>
