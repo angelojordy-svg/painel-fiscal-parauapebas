@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {} };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -9,6 +9,7 @@
     return brl.format(Math.abs(n) < 0.005 ? 0 : n);
   };
   const percent = (v) => `${pct.format(Number(v || 0) * 100)}%`;
+  const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   async function json(name) {
     const v = state.meta?.versao ? `?v=${encodeURIComponent(state.meta.versao)}` : "";
@@ -390,6 +391,127 @@
     document.getElementById("gastos-exportar").onclick = () => exportarGastosCSV(sel, v);
   }
 
+  const EMP_CAMPOS = ["data", "empenho", "unid", "unidade", "credor", "doc", "nat", "nat_nome", "funcao", "programa", "fonte_recurso", "valor", "liq", "pago", "a_pagar", "status", "eventos"];
+
+  function empObj(row, campos) {
+    const out = {};
+    (campos || EMP_CAMPOS).forEach((k, i) => { out[k] = row[i]; });
+    return out;
+  }
+
+  async function ensureEmpenhos(slug) {
+    if (state.empenhos[slug]) return state.empenhos[slug];
+    const dados = await json(`empenhos_${slug}`);
+    state.empenhos[slug] = dados;
+    return dados;
+  }
+
+  function initEmpenhosFiltros() {
+    const entSel = document.getElementById("emp-entidade");
+    const orgSel = document.getElementById("emp-orgao");
+    if (!entSel || !orgSel) return;
+    entSel.innerHTML = state.despesas.entidades.map((e) => `<option value="${e.slug}">${esc(e.nome)}</option>`).join("");
+    entSel.value = state.despesas.entidades[0]?.slug || "prefeitura";
+    const povoar = () => {
+      const slug = entSel.value;
+      orgSel.innerHTML = `<option value="">Todos os órgãos</option>${state.despesas.unidades.filter((u) => u.slug === slug).map((u) => `<option value="${u.unid}">${esc(u.nome)}</option>`).join("")}`;
+    };
+    povoar();
+    entSel.onchange = () => { povoar(); state.empLimite = 100; renderEmpenhos(); };
+    orgSel.onchange = () => { state.empLimite = 100; renderEmpenhos(); };
+    document.getElementById("emp-situacao").onchange = () => { state.empLimite = 100; renderEmpenhos(); };
+    document.getElementById("emp-busca").oninput = () => { state.empLimite = 100; renderEmpenhos(); };
+    document.getElementById("emp-folha").onchange = () => { state.empLimite = 100; renderEmpenhos(); };
+    document.getElementById("emp-carregar").onclick = () => { state.empLimite += 100; renderEmpenhos(); };
+    document.getElementById("emp-exportar").onclick = () => exportarEmpenhosCSV(state.empFiltrados, entSel.value);
+  }
+
+  function filtrarEmpenhos(dados) {
+    const org = document.getElementById("emp-orgao").value;
+    const situacao = document.getElementById("emp-situacao").value;
+    const q = norm(document.getElementById("emp-busca").value).trim();
+    const incluirFolha = document.getElementById("emp-folha")?.checked;
+    const campos = dados.meta?.campos || EMP_CAMPOS;
+    return dados.empenhos.map((r) => empObj(r, campos)).filter((e) => {
+      if (org && Number(e.unid) !== Number(org)) return false;
+      if (situacao && e.status !== situacao) return false;
+      const credor = norm(e.credor);
+      if (!incluirFolha && (credor.includes("FOLHA DE PAGAMENTO") || credor.includes("AUXILIO ALIMENTACAO"))) return false;
+      if (q && !norm(`${e.empenho} ${e.credor} ${e.doc} ${e.nat_nome} ${e.unidade}`).includes(q)) return false;
+      return true;
+    });
+  }
+
+  async function renderEmpenhos() {
+    const tbody = document.querySelector("#tabela-empenhos tbody");
+    if (!tbody) return;
+    const slug = document.getElementById("emp-entidade").value || "prefeitura";
+    const req = ++state.empReq;
+    tbody.innerHTML = `<tr><td colspan="9" class="nota">Carregando empenhos…</td></tr>`;
+    try {
+      const dados = await ensureEmpenhos(slug);
+      if (req !== state.empReq) return;
+      const rows = filtrarEmpenhos(dados);
+      state.empFiltrados = rows;
+      const page = rows.slice(0, state.empLimite);
+      tbody.innerHTML = page.map((e) => `<tr class="clickable" data-emp="${esc(e.empenho)}">
+        <td>${esc(e.data)}</td><td class="cod">${esc(e.empenho)}</td>
+        <td class="emp-orgao" title="${esc(e.unidade)}">${esc(e.unidade)}</td>
+        <td class="emp-credor" title="${esc(e.credor)}">${esc(e.credor)}${e.doc ? `<small> ${esc(fmtDoc(e.doc))}</small>` : ""}</td>
+        <td class="num">${money(e.valor)}</td><td class="num">${money(e.liq)}</td>
+        <td class="num">${money(e.pago)}</td><td class="num">${money(e.a_pagar)}</td>
+        <td><span class="pill ${e.status === "Anulado" ? "bad" : "ok"}">${esc(e.status)}</span></td>
+      </tr>`).join("") || `<tr><td colspan="9" class="nota">Nenhum empenho com esse filtro.</td></tr>`;
+      const folhaNota = document.getElementById("emp-folha")?.checked ? "" : " · folha fora";
+      document.getElementById("emp-nota").textContent = `${rows.length} empenho(s) · exibindo ${page.length} · ${dados.meta.entidade} até ${dados.meta.ate || "—"}${folhaNota}`;
+      document.getElementById("emp-mais").hidden = page.length >= rows.length;
+      tbody.onclick = (ev) => {
+        const tr = ev.target.closest("tr[data-emp]");
+        if (!tr) return;
+        const emp = rows.find((x) => String(x.empenho) === tr.dataset.emp);
+        if (emp) abrirEmpenho(emp);
+      };
+    } catch (e) {
+      if (req !== state.empReq) return;
+      tbody.innerHTML = `<tr><td colspan="9" class="nota">Não foi possível carregar: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function abrirEmpenho(e) {
+    document.getElementById("modal-title").textContent = `Empenho ${e.empenho} · ${e.credor}`;
+    const rotulos = { E: "Empenho", A: "Anulação", L: "Liquidação", P: "Pagamento" };
+    const eventos = (e.eventos || []).map(([tipo, data, valor]) => {
+      const cls = Number(valor) < 0 ? "neg" : (tipo === "E" ? "pos" : "");
+      return `<li><span class="tipo">${esc(rotulos[tipo] || tipo)}</span><span>${esc(data)}</span><span class="valor ${cls}">${money(valor)}</span></li>`;
+    }).join("") || `<li><span class="nota">Sem eventos detalhados.</span></li>`;
+    document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(e.data)} · ${esc(e.unidade)} · ${esc(e.status)}</p>
+      <div class="grid">${card("Empenhado", money(e.valor), "", "hero")}${card("Liquidado", money(e.liq))}${card("Pago", money(e.pago))}${card("A pagar", money(e.a_pagar), "", "alert")}</div>
+      <div class="two">
+        <div><h3>Classificação</h3><table class="mini"><tbody>
+          <tr><th>Natureza</th><td>${esc(e.nat)} · ${esc(e.nat_nome)}</td></tr>
+          <tr><th>Função</th><td>${esc(e.funcao)}</td></tr>
+          <tr><th>Programa</th><td>${esc(e.programa)}</td></tr>
+          <tr><th>Fonte</th><td>${esc(e.fonte_recurso)}</td></tr>
+          <tr><th>CNPJ</th><td>${e.doc ? esc(fmtDoc(e.doc)) : "—"}</td></tr>
+        </tbody></table></div>
+        <div><h3>Linha do tempo</h3><ol class="timeline">${eventos}</ol></div>
+      </div>`;
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function exportarEmpenhosCSV(rows, slug) {
+    const header = ["data", "empenho", "unidade", "credor", "cnpj", "natureza", "funcao", "programa", "fonte", "empenhado", "liquidado", "pago", "a_pagar", "status"];
+    const lines = [header, ...rows.map((e) => [e.data, e.empenho, e.unidade, e.credor, e.doc, e.nat_nome, e.funcao, e.programa, e.fonte_recurso, e.valor, e.liq, e.pago, e.a_pagar, e.status])];
+    const csv = lines.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `painel_fiscal_empenhos_${slug}_${state.meta.ano}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -574,6 +696,7 @@
     const id = (location.hash || "#panorama").replace("#", "");
     document.querySelectorAll(".tab").forEach((el) => { el.hidden = el.id !== id; });
     document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === id));
+    if (id === "empenhos") renderEmpenhos();
   }
 
   async function init() {
@@ -587,6 +710,7 @@
       renderDespesas();
       renderGastosFiltros();
       renderGastos();
+      initEmpenhosFiltros();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
@@ -603,6 +727,19 @@
       renderSobre();
       document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações + empenhos) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
       showTab();
+      const empParam = params.get("emp");
+      if (empParam) {
+        if (!location.hash) location.hash = "#empenhos";
+        setTimeout(async () => {
+          try {
+            const slug = document.getElementById("emp-entidade").value || "prefeitura";
+            const dados = await ensureEmpenhos(slug);
+            const campos = dados.meta?.campos || EMP_CAMPOS;
+            const e = dados.empenhos.map((r) => empObj(r, campos)).find((x) => String(x.empenho) === empParam);
+            if (e) abrirEmpenho(e);
+          } catch (_) { /* sem deep link se a entidade não carregar */ }
+        }, 300);
+      }
       window.addEventListener("hashchange", showTab);
       document.getElementById("modal-close").onclick = fecharModal;
       document.querySelector("#modal .modal-backdrop").onclick = fecharModal;

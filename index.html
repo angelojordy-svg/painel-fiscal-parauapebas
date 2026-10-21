@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021113958">
+<link rel="stylesheet" href="assets/app.css?v=20261021121607">
 </head>
 <body>
 <header>
@@ -24,6 +24,7 @@
   <a href="#panorama" data-tab="panorama">Panorama</a>
   <a href="#despesas" data-tab="despesas">Demonstrativo</a>
   <a href="#gastos" data-tab="gastos">Gastos</a>
+  <a href="#empenhos" data-tab="empenhos">Empenhos</a>
   <a href="#conferencia" data-tab="conferencia">Conferência</a>
   <a href="#sobre" data-tab="sobre">Sobre os dados</a>
 </nav>
@@ -203,6 +204,46 @@
     </section>
   </section>
 
+  <section id="empenhos" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Entidade
+        <select id="emp-entidade"></select>
+      </label>
+      <label>Órgão
+        <select id="emp-orgao"></select>
+      </label>
+      <label>Situação
+        <select id="emp-situacao">
+          <option value="">Todas</option>
+          <option value="Realizado">Realizado</option>
+          <option value="Anulado">Anulado</option>
+        </select>
+      </label>
+      <label>Buscar
+        <input id="emp-busca" type="search" placeholder="empenho, credor ou CNPJ">
+      </label>
+      <label class="toggle"><input type="checkbox" id="emp-folha"> Incluir folha</label>
+      <button id="emp-exportar" class="btn ghost" type="button">Exportar CSV</button>
+      <span id="emp-nota" class="nota"></span>
+    </div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Empenhos</h2>
+        <span class="nota">Clique numa linha para ver a linha do tempo · carregamento por entidade</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-empenhos" class="mini">
+          <thead>
+            <tr><th>Data</th><th>Empenho</th><th>Órgão</th><th>Credor</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">A pagar</th><th>Situação</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="emp-mais" class="emp-mais" hidden><button id="emp-carregar" class="btn ghost" type="button">Carregar mais</button></div>
+    </section>
+  </section>
+
   <section id="conferencia" class="tab" hidden>
     <div id="conferencia-kpis" class="grid"></div>
     <div class="panel">
@@ -240,6 +281,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021113958" defer></script>
+<script src="assets/app.js?v=20261021121607" defer></script>
 </body>
 </html>
