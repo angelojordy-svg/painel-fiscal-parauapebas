@@ -104,10 +104,10 @@
         <td class="num">${money(n.dot_atu)}</td><td class="num">${money(n.emp_ytd)}</td>
         <td class="num">${money(n.liq_ytd)}</td><td class="num">${money(n.pago_ytd)}</td>
         <td class="num">${percent(n.exec)}</td><td class="num">${money(n.saldo)}</td>
-        <td class="num">${money(n.proj_ago)}</td><td class="num">${money(n.proj_set)}</td>
+        <td class="num"><span class="proj">F ${money(n.proj_ago)}</span><span class="proj">P ${money(n.proj_set)}</span></td>
         <td class="num ${n.saldo_est_ago < -0.005 ? "neg" : ""}">${money(n.saldo_est_ago)}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="11" class="nota">Nenhuma natureza com esse filtro.</td></tr>`;
+    }).join("") || `<tr><td colspan="10" class="nota">Nenhuma natureza com esse filtro.</td></tr>`;
   }
 
   function exportarCSV() {
