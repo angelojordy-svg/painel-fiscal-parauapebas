@@ -436,7 +436,7 @@
       if (org && Number(e.unid) !== Number(org)) return false;
       if (situacao && e.status !== situacao) return false;
       const credor = norm(e.credor);
-      if (!incluirFolha && (credor.includes("FOLHA DE PAGAMENTO") || credor.includes("AUXILIO ALIMENTACAO"))) return false;
+      if (!incluirFolha && (credor.includes("folha de pagamento") || credor.includes("auxilio alimentacao"))) return false;
       if (q && !norm(`${e.empenho} ${e.credor} ${e.doc} ${e.nat_nome} ${e.unidade}`).includes(q)) return false;
       return true;
     });
