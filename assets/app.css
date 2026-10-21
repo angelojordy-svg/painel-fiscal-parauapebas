@@ -69,6 +69,8 @@ tr:hover td{background:#f8fbfe}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin:0 0 10px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px}
+.legend .sw-emp{background:var(--brand)}
+.legend .sw-liq{background:#9bc7df}
 .legend .sw-pago{background:#0f766e}
 .legend .sw-a-pagar{background:#d97706}
 .legend .sw-a-liquidar{background:#2563eb}
@@ -103,6 +105,23 @@ tr:hover td{background:#f8fbfe}
 .mes .b1,.mes .b2{width:9px;border-radius:4px 4px 0 0;min-height:1px}
 .mes .b1{background:var(--brand)}
 .mes .b2{background:#9bc7df}
+.mes .b3{background:#0f766e}
+.funil{display:flex;flex-direction:column;gap:4px}
+.funil-etapa{display:grid;grid-template-columns:minmax(150px,220px) 1fr 140px;gap:10px;align-items:center;font-size:12.5px}
+.funil-label{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.funil-label small{display:block;color:var(--muted);font-size:10.5px;font-weight:600}
+.funil-track{background:#eef2f7;border-radius:8px;height:26px;overflow:hidden}
+.funil-fill{height:100%;border-radius:8px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;font-weight:800;white-space:nowrap;min-width:2px}
+.funil-value{text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
+.funil-value small{display:block;color:var(--muted);font-size:10.5px;font-weight:600}
+.funil-diff{grid-column:2/3;font-size:10.5px;color:var(--muted);margin:-2px 0 2px 8px}
+.funil-diff b{color:var(--ink);font-weight:800}
+.funil-diff b.neg{color:var(--bad)}
+@media(max-width:760px){
+  .funil-etapa{grid-template-columns:1fr auto}
+  .funil-track{grid-column:1/-1}
+  .funil-diff{grid-column:1/-1;margin-left:0}
+}
 .projecoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
 .projecoes .box{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#f9fbfd;font-size:12.5px}
 .projecoes .box b{display:block;font-size:16px;margin-top:2px}

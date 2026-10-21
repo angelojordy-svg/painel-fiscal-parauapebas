@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, conferencia: null, sobre: null, unidade: null, detalhes: {} };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {} };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -128,6 +128,268 @@
     });
   }
 
+  function gastosSelecao() {
+    const ent = document.getElementById("gastos-entidade")?.value || "";
+    const org = document.getElementById("gastos-orgao")?.value || "";
+    if (org) {
+      const [slug, unid] = org.split("|");
+      return { slug, unid: Number(unid) };
+    }
+    return { slug: ent, unid: null };
+  }
+
+  function gastosTotais({ slug, unid }) {
+    if (unid) {
+      const u = state.despesas.unidades.find((x) => x.unid === unid && x.slug === slug);
+      if (u) return normalizarTotais(u.totais);
+    }
+    if (slug) {
+      const e = state.despesas.entidades.find((x) => x.slug === slug);
+      if (e) return normalizarTotais(e.totais);
+    }
+    return normalizarTotais(state.despesas.totais);
+  }
+
+  function normalizarTotais(t) {
+    return {
+      dot_fix: Number(t.dot_fix || 0),
+      dot_atu: Number(t.dot_atu || 0),
+      emp: Number(t.emp_ytd ?? t.emp ?? 0),
+      liq: Number(t.liq_ytd ?? t.liq ?? 0),
+      pago: Number(t.pago_ytd ?? t.pago ?? 0),
+    };
+  }
+
+  function renderGastosFiltros() {
+    const entSel = document.getElementById("gastos-entidade");
+    const orgSel = document.getElementById("gastos-orgao");
+    if (!entSel || !orgSel) return;
+    const atual = entSel.value;
+    entSel.innerHTML = `<option value="">Todas as entidades</option>${state.despesas.entidades.map((e) => `<option value="${e.slug}">${esc(e.nome)}</option>`).join("")}`;
+    if (atual) entSel.value = atual;
+    const povoar = () => {
+      const slug = entSel.value;
+      const unidades = state.despesas.unidades.filter((u) => !slug || u.slug === slug);
+      orgSel.innerHTML = `<option value="">Todos os órgãos</option>${unidades.map((u) => `<option value="${u.slug}|${u.unid}">${esc(u.nome)}</option>`).join("")}`;
+    };
+    povoar();
+    entSel.onchange = () => { povoar(); renderGastos(); };
+    orgSel.onchange = renderGastos;
+  }
+
+  function renderFunil(v) {
+    const base = Math.max(v.dotFix, v.dotAtu, v.emp, v.liq, v.pago, 1);
+    const stages = [
+      { label: "Dotação fixada", value: v.dotFix, color: "#0b5c8a", sub: "ponto de partida" },
+      { label: "Dotação atualizada", value: v.dotAtu, color: "#0e7aa8", sub: "após créditos/reduções" },
+      { label: "Empenhado", value: v.emp, color: "#2563eb", sub: "compromisso assumido" },
+      { label: "Liquidado", value: v.liq, color: "#d97706", sub: "entrega conferida" },
+      { label: "Pago", value: v.pago, color: "#0f766e", sub: "saiu do caixa" },
+    ];
+    const diffs = {
+      1: { label: "Créditos/reduções", value: v.supl, note: v.supl >= 0 ? "suplementação" : "redução" },
+      2: { label: "Saldo a empenhar", value: v.saldoEmp, note: "dotação − empenhado" },
+      3: { label: "A liquidar", value: v.aLiq, note: "empenhado − liquidado" },
+      4: { label: "A pagar", value: v.aPagar, note: "liquidado − pago" },
+    };
+    const rows = [];
+    stages.forEach((s, i) => {
+      const w = base ? (s.value / base) * 100 : 0;
+      rows.push(`<div class="funil-etapa">
+        <span class="funil-label">${esc(s.label)}<small>${esc(s.sub)}</small></span>
+        <span class="funil-track"><span class="funil-fill" style="width:${w.toFixed(2)}%;background:${s.color}">${w > 18 ? money(s.value) : ""}</span></span>
+        <span class="funil-value">${money(s.value)}${v.dotAtu ? `<small>${percent(s.value / v.dotAtu)} da dotação</small>` : ""}</span>
+      </div>`);
+      const d = diffs[i + 1];
+      if (d) {
+        const neg = d.value < -0.005;
+        rows.push(`<div class="funil-diff">${neg ? "▲" : "▼"} ${esc(d.label)}: <b class="${neg ? "neg" : ""}">${money(Math.abs(d.value))}</b> · ${esc(d.note)}</div>`);
+      }
+    });
+    document.getElementById("gastos-funil").innerHTML = rows.join("");
+  }
+
+  function renderGastosParado(v) {
+    const acima = v.saldoEmp < -0.005;
+    document.getElementById("gastos-parado").innerHTML = [
+      card(acima ? "Empenhado acima da dotação" : "Não empenhado",
+        money(acima ? -v.saldoEmp : v.saldoEmp),
+        acima ? "atenção: empenho maior que a dotação" : "sobrou da dotação",
+        acima ? "alert" : ""),
+      card("Não liquidado", money(Math.max(v.aLiq, 0)), "empenhado sem entrega conferida", "alert"),
+      card("Não pago", money(Math.max(v.aPagar, 0)), "liquidado sem saída de caixa", "alert"),
+      card(v.supl >= 0 ? "Créditos adicionais" : "Reduções", money(Math.abs(v.supl)), "dotação atualizada − fixada"),
+    ].join("");
+  }
+
+  function renderMensalGastos(el, rows) {
+    if (!el) return;
+    const max = Math.max(1, ...(rows || []).flatMap((m) => [Number(m.emp || 0), Number(m.liq || 0), Number(m.pago || 0)]));
+    el.innerHTML = (rows || []).map((m) => {
+      const he = Math.max(1, (Number(m.emp || 0) / max) * 100);
+      const hl = Math.max(1, (Number(m.liq || 0) / max) * 100);
+      const hp = Math.max(1, (Number(m.pago || 0) / max) * 100);
+      return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)} · pago ${money(m.pago)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span><span class="b3" style="height:${hp}%"></span></div><span>${esc(m.nome)}</span></div>`;
+    }).join("");
+  }
+
+  function mensalGastos({ slug, unid }) {
+    if (unid) {
+      const u = state.despesas.unidades.find((x) => x.unid === unid && x.slug === slug);
+      return u?.mensal || [];
+    }
+    if (!slug) return state.despesas.mensal || [];
+    const base = (state.despesas.mensal || []).map((m) => ({
+      mes: m.mes, nome: m.nome, emp: 0, liq: 0, pago: 0,
+    }));
+    for (const u of state.despesas.unidades.filter((x) => x.slug === slug)) {
+      for (const m of u.mensal || []) {
+        const r = base.find((x) => x.mes === m.mes);
+        if (!r) continue;
+        r.emp += Number(m.emp || 0);
+        r.liq += Number(m.liq || 0);
+        r.pago += Number(m.pago || 0);
+      }
+    }
+    return base;
+  }
+
+  function renderGastosEtapas(v) {
+    const rows = [
+      ["Dotação fixada", v.dotFix, null],
+      ["Dotação atualizada", v.dotAtu, v.supl],
+      ["Empenhado", v.emp, -v.saldoEmp],
+      ["Liquidado", v.liq, -v.aLiq],
+      ["Pago", v.pago, -v.aPagar],
+    ];
+    document.getElementById("gastos-etapas").innerHTML = `<div class="table-wrap"><table class="mini"><thead><tr><th>Etapa</th><th class="num">Valor</th><th class="num">% dotação</th><th class="num">Variação</th></tr></thead><tbody>${rows.map(([label, value, diff]) => `<tr><td>${esc(label)}</td><td class="num">${money(value)}</td><td class="num">${v.dotAtu ? percent(value / v.dotAtu) : "—"}</td><td class="num">${diff == null ? "—" : money(diff)}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+
+  function renderTabelaGastosOrgao(sel) {
+    const rows = state.despesas.unidades
+      .filter((u) => !sel.slug || u.slug === sel.slug)
+      .sort((a, b) => Number(b.totais.emp_ytd || 0) - Number(a.totais.emp_ytd || 0));
+    const tbody = document.querySelector("#tabela-gastos-orgao tbody");
+    if (!tbody) return;
+    tbody.innerHTML = rows.map((u) => {
+      const t = u.totais;
+      const emp = Number(t.emp_ytd || 0);
+      const liq = Number(t.liq_ytd || 0);
+      const pago = Number(t.pago_ytd || 0);
+      const dot = Number(t.dot_atu || 0);
+      const exec = dot ? emp / dot : 0;
+      return `<tr class="clickable" data-slug="${u.slug}" data-unid="${u.unid}">
+        <td>${esc(u.nome)}</td><td>${esc(u.entidade)}</td>
+        <td class="num">${money(dot)}</td><td class="num">${money(emp)}</td>
+        <td class="num">${money(liq)}</td><td class="num">${money(pago)}</td>
+        <td class="num">${percent(exec)}</td>
+        <td class="num">${money(Math.max(emp - liq, 0))}</td>
+        <td class="num">${money(Math.max(liq - pago, 0))}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="9" class="nota">Sem órgãos.</td></tr>`;
+    tbody.onclick = (e) => {
+      const tr = e.target.closest("tr[data-unid]");
+      if (!tr) return;
+      const ent = document.getElementById("gastos-entidade");
+      ent.value = tr.dataset.slug;
+      ent.onchange();
+      document.getElementById("gastos-orgao").value = `${tr.dataset.slug}|${tr.dataset.unid}`;
+      renderGastos();
+    };
+  }
+
+  function agregarGastos(rows, slug) {
+    const map = {};
+    for (const r of rows) {
+      if (slug && r.slug !== slug) continue;
+      const chave = r.cod || r.nome;
+      const a = map[chave] || (map[chave] = {
+        nome: r.nome, cod: r.cod, emp: 0, liq: 0, pago: 0,
+        a_liquidar: 0, a_pagar: 0,
+      });
+      a.emp += Number(r.emp || 0);
+      a.liq += Number(r.liq || 0);
+      a.pago += Number(r.pago || 0);
+      a.a_liquidar += Number(r.a_liquidar || 0);
+      a.a_pagar += Number(r.a_pagar || 0);
+    }
+    return Object.values(map).filter((a) => a.emp > 0.005).sort((a, b) => b.emp - a.emp);
+  }
+
+  function renderRankGastos(id, rows, slug) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const agg = agregarGastos(rows, slug).slice(0, 10);
+    if (!agg.length) {
+      el.innerHTML = `<p class="nota">Sem dados.</p>`;
+      return;
+    }
+    el.innerHTML = `<div class="table-wrap"><table class="mini"><thead><tr><th>Recorte</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">A liquidar</th><th class="num">A pagar</th></tr></thead><tbody>${agg.map((r) => `<tr><td>${esc(r.nome)}</td><td class="num">${money(r.emp)}</td><td class="num">${money(r.liq)}</td><td class="num">${money(r.pago)}</td><td class="num">${money(r.a_liquidar)}</td><td class="num">${money(r.a_pagar)}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+
+  function exportarGastosCSV(sel, v) {
+    const header = ["etapa", "valor", "percentual_da_dotacao", "variacao"];
+    const rows = [
+      ["Dotação fixada", v.dotFix, v.dotAtu ? v.dotFix / v.dotAtu : "", ""],
+      ["Dotação atualizada", v.dotAtu, v.dotAtu ? 1 : "", v.supl],
+      ["Empenhado", v.emp, v.dotAtu ? v.emp / v.dotAtu : "", v.emp - v.dotAtu],
+      ["Liquidado", v.liq, v.dotAtu ? v.liq / v.dotAtu : "", v.liq - v.emp],
+      ["Pago", v.pago, v.dotAtu ? v.pago / v.dotAtu : "", v.pago - v.liq],
+    ];
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `painel_fiscal_gastos_${sel.slug || "todas"}${sel.unid ? `_${sel.unid}` : ""}_${state.meta.ano}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function renderGastos() {
+    if (!state.despesas) return;
+    const sel = gastosSelecao();
+    const t = gastosTotais(sel);
+    const dotFix = t.dot_fix;
+    const dotAtu = t.dot_atu;
+    const emp = t.emp;
+    const liq = t.liq;
+    const pago = t.pago;
+    const saldoEmp = dotAtu - emp;
+    const aLiq = emp - liq;
+    const aPagar = liq - pago;
+    const supl = dotAtu - dotFix;
+    const exec = dotAtu ? emp / dotAtu : 0;
+    const v = { dotFix, dotAtu, emp, liq, pago, saldoEmp, aLiq, aPagar, supl };
+
+    const nota = document.getElementById("gastos-nota");
+    if (nota) {
+      const u = sel.unid ? state.despesas.unidades.find((x) => x.unid === sel.unid && x.slug === sel.slug) : null;
+      const e = sel.slug ? state.despesas.entidades.find((x) => x.slug === sel.slug) : null;
+      nota.textContent = u ? `${u.entidade} · ${u.nome}` : (e ? e.nome : "Todas as entidades");
+    }
+
+    document.getElementById("gastos-kpis").innerHTML = [
+      card("Dotação fixada", money(dotFix)),
+      card("Dotação atualizada", money(dotAtu), `créditos/reduções ${money(supl)}`, "hero"),
+      card("Empenhado", money(emp), `${percent(exec)} da dotação`),
+      card("Liquidado", money(liq), `${percent(emp ? liq / emp : 0)} do empenhado`),
+      card("Pago", money(pago), `${percent(liq ? pago / liq : 0)} do liquidado`),
+      card("Saldo a empenhar", money(saldoEmp), "dotação − empenhado", saldoEmp < 0 ? "alert" : ""),
+      card("A liquidar", money(aLiq), "empenhado − liquidado", "alert"),
+      card("A pagar", money(aPagar), "liquidado − pago", "alert"),
+    ].join("");
+
+    renderFunil(v);
+    renderGastosParado(v);
+    renderMensalGastos(document.getElementById("gastos-mensal"), mensalGastos(sel));
+    renderGastosEtapas(v);
+    renderTabelaGastosOrgao(sel);
+    renderRankGastos("gastos-funcao", state.gastos?.por_funcao || [], sel.slug);
+    renderRankGastos("gastos-natureza", state.gastos?.por_natureza || [], sel.slug);
+    renderRankGastos("gastos-fonte", state.gastos?.por_fonte || [], sel.slug);
+    document.getElementById("gastos-exportar").onclick = () => exportarGastosCSV(sel, v);
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -155,13 +417,14 @@
     bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => r.entidade === "Prefeitura" ? r.nome : `${r.entidade || ""} - ${r.nome}`);
     bars(document.getElementById("top-naturezas"), p.top_naturezas || [], "liq", (r) => `${r.cod} · ${r.nome}`);
 
-    const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq]));
+    const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq, m.pago]));
     const ent = p.entidades || [];
     document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dotação</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provisória</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
     document.getElementById("mensal").innerHTML = (p.mensal || []).map((m) => {
       const he = Math.max(1, (m.emp / max) * 100);
       const hl = Math.max(1, (m.liq / max) * 100);
-      return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span></div><span>${esc(m.nome)}</span></div>`;
+      const hp = Math.max(1, (m.pago / max) * 100);
+      return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)} · pago ${money(m.pago)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span><span class="b3" style="height:${hp}%"></span></div><span>${esc(m.nome)}</span></div>`;
     }).join("");
     renderExecucao();
   }
@@ -316,12 +579,14 @@
   async function init() {
     try {
       state.meta = await json("meta");
-      const [panorama, despesas, conferencia, sobre] = await Promise.all([
-        json("panorama"), json("despesas"), json("conferencia"), json("sobre"),
+      const [panorama, despesas, gastos, conferencia, sobre] = await Promise.all([
+        json("panorama"), json("despesas"), json("gastos"), json("conferencia"), json("sobre"),
       ]);
-      Object.assign(state, { panorama, despesas, conferencia, sobre });
+      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, conferencia, sobre });
       renderPanorama();
       renderDespesas();
+      renderGastosFiltros();
+      renderGastos();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
@@ -336,7 +601,7 @@
       }
       renderConferencia();
       renderSobre();
-      document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
+      document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações + empenhos) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
       showTab();
       window.addEventListener("hashchange", showTab);
       document.getElementById("modal-close").onclick = fecharModal;
