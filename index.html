@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel Fiscal Parauapebas</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Painel Fiscal Parauapebas</div>
+    <h1>Painel Fiscal <span>Parauapebas</span></h1>
+    <div class="sub">Prefeitura de Parauapebas/PA · demonstrativo orçamentário, projeções e conferência com o Portal da Transparência.</div>
+    <div class="badges">
+      <span class="badge ok">Fechado: Jan-Ago</span>
+      <span class="badge warn">Provisório: Jan-Set</span>
+      <span class="badge muted">Out/2026 parcial</span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs wrap" aria-label="Seções">
+  <a href="#panorama" data-tab="panorama">Panorama</a>
+  <a href="#despesas" data-tab="despesas">Demonstrativo</a>
+  <a href="#conferencia" data-tab="conferencia">Conferência</a>
+  <a href="#sobre" data-tab="sobre">Sobre os dados</a>
+</nav>
+
+<main class="wrap">
+  <div id="erro" class="erro" hidden></div>
+
+  <section id="panorama" class="tab">
+    <div id="panorama-kpis" class="grid"></div>
+    <div class="two">
+      <section class="panel">
+        <h2>Fechamento bimestral</h2>
+        <div id="fechamento"></div>
+        <div id="projecoes" class="projecoes"></div>
+      </section>
+      <section class="panel">
+        <h2>Alertas</h2>
+        <div id="alertas"></div>
+      </section>
+    </div>
+    <div class="two">
+      <section class="panel">
+        <h2>Maiores unidades por empenhado</h2>
+        <div id="top-unidades" class="bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Maiores naturezas por liquidado</h2>
+        <div id="top-naturezas" class="bars"></div>
+      </section>
+    </div>
+    <section class="panel">
+      <h2>Movimento mensal</h2>
+      <div id="mensal" class="mensal"></div>
+    </section>
+  </section>
+
+  <section id="despesas" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Unidade
+        <select id="filtro-unidade"></select>
+      </label>
+      <label>Buscar natureza
+        <input id="filtro-busca" type="search" placeholder="código ou descrição">
+      </label>
+      <button id="exportar-csv" class="btn" type="button">Exportar CSV</button>
+      <span id="despesas-nota" class="nota"></span>
+    </div>
+    <div id="despesas-kpis" class="grid"></div>
+    <div class="panel">
+      <div class="table-head">
+        <h2>Demonstrativo por natureza da despesa</h2>
+        <span class="nota">13º somente em 3.1.90.* · projeção é alerta, não saldo para empenhar</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-despesas">
+          <thead>
+            <tr>
+              <th>Código</th><th>Especificação</th>
+              <th class="num">Dotação atual.</th><th class="num">Empenhado</th>
+              <th class="num">Liquidado</th><th class="num">Pago</th>
+              <th class="num">Exec.</th><th class="num">Saldo a empenhar</th>
+              <th class="num">Projeção fechada Jan-Ago</th><th class="num">Projeção prov. Jan-Set</th>
+              <th class="num">Saldo estimado (fechada)</th><th>Alerta</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="conferencia" class="tab" hidden>
+    <div id="conferencia-kpis" class="grid"></div>
+    <div class="panel">
+      <div class="table-head">
+        <h2>Conferência: portal × liquidações</h2>
+        <span class="nota">Liquidações com Registro = Anulado deduzido; set/2026 e out/2026 são provisórios.</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-conferencia">
+          <thead>
+            <tr><th>Unidade</th><th>Competência</th><th class="num">Portal</th><th class="num">Liquidações</th><th class="num">Diferença</th><th>Status</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="sobre" class="tab" hidden>
+    <div id="sobre-conteudo" class="panel"></div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span id="rodape">Carregando…</span>
+</footer>
+<script src="assets/app.js" defer></script>
+</body>
+</html>
