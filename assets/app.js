@@ -34,7 +34,7 @@
     const p = state.panorama;
     const t = p.totais;
     document.getElementById("panorama-kpis").innerHTML = [
-      card("Dotação atualizada", money(t.aut), `fixada ${money(t.fix)}`, "hero"),
+      card("Dotação atualizada", money(t.dot_atu), `fixada ${money(t.dot_fix)}`, "hero"),
       card("Empenhado até out", money(t.emp_ytd), `${percent(t.exec)} da dotação`),
       card("Liquidado até out", money(t.liq_ytd), `movimento out ${money(t.liq_mes)}`),
       card("Pago até out", money(t.pago_ytd), `movimento out ${money(t.pago_mes)}`),
