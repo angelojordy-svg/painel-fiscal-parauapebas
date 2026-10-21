@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021124328">
+<link rel="stylesheet" href="assets/app.css?v=20261021135108">
 </head>
 <body>
 <header>
@@ -26,6 +26,8 @@
   <a href="#gastos" data-tab="gastos">Gastos</a>
   <a href="#empenhos" data-tab="empenhos">Empenhos</a>
   <a href="#fornecedores" data-tab="fornecedores">Fornecedores</a>
+  <a href="#licitacoes" data-tab="licitacoes">Licitações</a>
+  <a href="#contratos" data-tab="contratos">Contratos</a>
   <a href="#conferencia" data-tab="conferencia">Conferência</a>
   <a href="#sobre" data-tab="sobre">Sobre os dados</a>
 </nav>
@@ -286,6 +288,94 @@
     </section>
   </section>
 
+  <section id="licitacoes" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Modalidade
+        <select id="lic-modalidade"><option value="">Todas</option></select>
+      </label>
+      <label>Situação
+        <select id="lic-situacao"><option value="">Todas</option></select>
+      </label>
+      <label>Buscar
+        <input id="lic-busca" type="search" placeholder="número, processo ou objeto">
+      </label>
+      <button id="lic-exportar" class="btn ghost" type="button">Exportar CSV</button>
+      <span id="lic-nota" class="nota"></span>
+    </div>
+
+    <div id="lic-kpis" class="grid"></div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Radar de sessões</h2>
+        <span class="nota">Sessões com abertura a partir de hoje (quando o PNCP informa a data)</span>
+      </div>
+      <div id="lic-radar"></div>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Licitações publicadas</h2>
+        <span class="nota">Clique numa linha para abrir o detalhe</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-licitacoes" class="mini">
+          <thead>
+            <tr><th>Publicação</th><th>Número / processo</th><th>Objeto</th><th>Modalidade</th><th>Situação</th><th class="num">Estimado</th><th class="num">Homologado</th><th>Abertura</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="lic-mais" class="emp-mais" hidden><button id="lic-carregar" class="btn ghost" type="button">Carregar mais</button></div>
+    </section>
+  </section>
+
+  <section id="contratos" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Situação
+        <select id="con-situacao">
+          <option value="ativos">Ativos</option>
+          <option value="">Todos</option>
+          <option value="a_vencer">A vencer (90 dias)</option>
+          <option value="vigente">Vigentes</option>
+          <option value="encerrado">Encerrados</option>
+          <option value="futuro">Futuros</option>
+        </select>
+      </label>
+      <label>Buscar
+        <input id="con-busca" type="search" placeholder="contrato, fornecedor, CNPJ ou objeto">
+      </label>
+      <button id="con-exportar" class="btn ghost" type="button">Exportar CSV</button>
+      <span id="con-nota" class="nota"></span>
+    </div>
+
+    <div id="con-kpis" class="grid"></div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Vencendo nos próximos 90 dias</h2>
+        <span class="nota">Renovar, licitar de novo ou encerrar a tempo</span>
+      </div>
+      <div id="con-vencendo"></div>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Contratos com vigência no exercício</h2>
+        <span class="nota">Clique numa linha para abrir o detalhe</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-contratos" class="mini">
+          <thead>
+            <tr><th>Contrato</th><th>Fornecedor</th><th>Órgão</th><th>Início</th><th>Fim</th><th class="num">Valor</th><th class="num">Dias</th><th>Status</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="con-mais" class="emp-mais" hidden><button id="con-carregar" class="btn ghost" type="button">Carregar mais</button></div>
+    </section>
+  </section>
+
   <section id="conferencia" class="tab" hidden>
     <div id="conferencia-kpis" class="grid"></div>
     <div class="panel">
@@ -323,6 +413,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021124328" defer></script>
+<script src="assets/app.js?v=20261021135108" defer></script>
 </body>
 </html>

@@ -128,6 +128,23 @@ tr:hover td{background:#f8fbfe}
 #tabela-empenhos .emp-orgao{max-width:190px;overflow:hidden;text-overflow:ellipsis}
 #tabela-empenhos .emp-credor{max-width:280px;overflow:hidden;text-overflow:ellipsis}
 #tabela-fornecedores .forn-nome{max-width:360px;overflow:hidden;text-overflow:ellipsis}
+#tabela-licitacoes{table-layout:fixed;min-width:1000px}
+#tabela-licitacoes th:nth-child(1){width:100px}
+#tabela-licitacoes th:nth-child(2){width:150px}
+#tabela-licitacoes th:nth-child(3){width:380px}
+#tabela-licitacoes th:nth-child(4){width:170px}
+#tabela-licitacoes th:nth-child(5){width:140px}
+#tabela-licitacoes th:nth-child(6){width:120px}
+#tabela-licitacoes th:nth-child(7){width:120px}
+#tabela-licitacoes th:nth-child(8){width:100px}
+#tabela-licitacoes td{overflow:hidden;text-overflow:ellipsis}
+#lic-radar table{table-layout:fixed;min-width:0}
+#lic-radar th:nth-child(1){width:100px}
+#lic-radar th:nth-child(3){width:130px}
+#lic-radar th:nth-child(4){width:70px}
+#lic-radar th:nth-child(5){width:110px}
+#lic-radar th:nth-child(6){width:60px}
+#lic-radar td{overflow:hidden;text-overflow:ellipsis}
 .timeline{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
 .timeline li{display:grid;grid-template-columns:92px 1fr auto;gap:10px;align-items:start;font-size:12px;border-left:3px solid var(--line);padding-left:10px}
 .timeline .tipo{font-weight:800}

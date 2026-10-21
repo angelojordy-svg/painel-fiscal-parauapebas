@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [] };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -639,6 +639,212 @@
     URL.revokeObjectURL(a.href);
   }
 
+  const linkSeguro = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : "");
+
+  function baixarCSV(nome, header, rows) {
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nome;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function ensureLicitacoes() {
+    if (!state.licitacoes) state.licitacoes = await json("licitacoes");
+    return state.licitacoes;
+  }
+
+  async function ensureContratos() {
+    if (!state.contratos) state.contratos = await json("contratos");
+    return state.contratos;
+  }
+
+  function initLicitacoesFiltros() {
+    const busca = document.getElementById("lic-busca");
+    if (!busca) return;
+    busca.oninput = () => { state.licLimite = 50; renderLicitacoes(); };
+    document.getElementById("lic-modalidade").onchange = () => { state.licLimite = 50; renderLicitacoes(); };
+    document.getElementById("lic-situacao").onchange = () => { state.licLimite = 50; renderLicitacoes(); };
+    document.getElementById("lic-carregar").onclick = () => { state.licLimite += 50; renderLicitacoes(); };
+    document.getElementById("lic-exportar").onclick = () => exportarLicitacoesCSV(state.licFiltrados);
+  }
+
+  function filtrarLicitacoes(dados) {
+    const mod = document.getElementById("lic-modalidade").value;
+    const sit = document.getElementById("lic-situacao").value;
+    const q = norm(document.getElementById("lic-busca").value).trim();
+    return (dados.licitacoes || []).filter((l) => {
+      if (mod && l.modalidade !== mod) return false;
+      if (sit && l.situacao !== sit) return false;
+      if (q && !norm(`${l.numero} ${l.processo} ${l.objeto} ${l.orgao}`).includes(q)) return false;
+      return true;
+    });
+  }
+
+  async function renderLicitacoes() {
+    const tbody = document.querySelector("#tabela-licitacoes tbody");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="8" class="nota">Carregando licitações…</td></tr>`;
+    try {
+      const dados = await ensureLicitacoes();
+      const modSel = document.getElementById("lic-modalidade");
+      const sitSel = document.getElementById("lic-situacao");
+      if (modSel.options.length <= 1) {
+        const mods = [...new Set((dados.licitacoes || []).map((l) => l.modalidade).filter(Boolean))].sort();
+        modSel.innerHTML += mods.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+      }
+      if (sitSel.options.length <= 1) {
+        const sits = [...new Set((dados.licitacoes || []).map((l) => l.situacao).filter(Boolean))].sort();
+        sitSel.innerHTML += sits.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+      }
+      const rows = filtrarLicitacoes(dados);
+      state.licFiltrados = rows;
+      const page = rows.slice(0, state.licLimite);
+      const m = dados.meta || {};
+      document.getElementById("lic-kpis").innerHTML = [
+        card("Licitações", String(m.total || 0), `até ${m.ate || "—"}`, "hero"),
+        card("Valor estimado", money(m.valor_estimado), `${m.modalidades || 0} modalidades`),
+        card("Valor homologado", money(m.valor_homologado), "no acervo"),
+        card("Radar", String(m.radar || 0), "sessões futuras · PNCP + portal"),
+      ].join("");
+      const radar = dados.radar || [];
+      document.getElementById("lic-radar").innerHTML = radar.length
+        ? `<div class="table-wrap"><table class="mini"><thead><tr><th>Abertura</th><th>Objeto</th><th>Órgão</th><th>Fonte</th><th class="num">Estimado</th><th class="num">Dias</th></tr></thead><tbody>${radar.slice(0, 10).map((l) => `<tr><td>${esc(l.abertura)}</td><td>${esc(l.objeto)}</td><td>${esc(l.orgao || "—")}</td><td>${esc(l.fonte || "pncp")}</td><td class="num">${Number(l.valor_estimado) ? money(l.valor_estimado) : "—"}</td><td class="num">${l.dias_abertura}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="nota">Nenhuma sessão futura com data de abertura até ${esc(m.ate || "—")}. O acervo publicado está abaixo.</p>`;
+      tbody.innerHTML = page.map((l) => `<tr class="clickable" data-id="${esc(l.id)}">
+        <td>${esc(l.publicacao)}</td><td>${esc(l.numero || l.processo)}</td>
+        <td class="forn-nome" title="${esc(l.objeto)}">${esc(l.objeto)}</td>
+        <td>${esc(l.modalidade)}</td><td>${esc(l.situacao)}</td>
+        <td class="num">${money(l.valor_estimado)}</td><td class="num">${money(l.valor_homologado)}</td>
+        <td>${esc(l.abertura || "—")}</td>
+      </tr>`).join("") || `<tr><td colspan="8" class="nota">Nenhuma licitação com esse filtro.</td></tr>`;
+      document.getElementById("lic-nota").textContent = `${rows.length} licitação(ões) · exibindo ${page.length}`;
+      document.getElementById("lic-mais").hidden = page.length >= rows.length;
+      tbody.onclick = (ev) => {
+        const tr = ev.target.closest("tr[data-id]");
+        if (!tr) return;
+        const l = rows.find((x) => x.id === tr.dataset.id);
+        if (l) abrirLicitacao(l);
+      };
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="8" class="nota">Não foi possível carregar: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function abrirLicitacao(l) {
+    document.getElementById("modal-title").textContent = `Licitação ${l.numero || l.processo || l.id}`;
+    const links = [l.link, l.link_processo].map(linkSeguro).filter(Boolean);
+    document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(l.publicacao)} · ${esc(l.modalidade)} · ${esc(l.situacao)}</p>
+      <div class="grid">${card("Estimado", money(l.valor_estimado), "", "hero")}${card("Homologado", money(l.valor_homologado))}${card("Abertura", esc(l.abertura || "—"), l.dias_abertura == null ? "" : `${l.dias_abertura} dia(s)`)}${card("SRP", l.srp ? "Sim" : "Não")}</div>
+      <p><b>Objeto:</b> ${esc(l.objeto)}</p>
+      <table class="mini"><tbody>
+        <tr><th>Processo</th><td>${esc(l.processo || "—")}</td></tr>
+        <tr><th>Órgão</th><td>${esc(l.orgao)} · ${esc(l.unidade)}</td></tr>
+        <tr><th>CNPJ</th><td>${l.cnpj ? esc(fmtDoc(l.cnpj)) : "—"}</td></tr>
+        <tr><th>Modo de disputa</th><td>${esc(l.modo || "—")}</td></tr>
+        <tr><th>Links</th><td>${links.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">abrir</a>`).join(" · ") || "—"}</td></tr>
+      </tbody></table>`;
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function exportarLicitacoesCSV(rows) {
+    baixarCSV(`painel_fiscal_licitacoes_${state.meta.ano}.csv`,
+      ["publicacao", "numero", "processo", "objeto", "orgao", "unidade", "modalidade", "situacao", "valor_estimado", "valor_homologado", "abertura"],
+      rows.map((l) => [l.publicacao, l.numero, l.processo, l.objeto, l.orgao, l.unidade, l.modalidade, l.situacao, l.valor_estimado, l.valor_homologado, l.abertura]));
+  }
+
+  function initContratosFiltros() {
+    const busca = document.getElementById("con-busca");
+    if (!busca) return;
+    busca.oninput = () => { state.conLimite = 50; renderContratos(); };
+    document.getElementById("con-situacao").onchange = () => { state.conLimite = 50; renderContratos(); };
+    document.getElementById("con-carregar").onclick = () => { state.conLimite += 50; renderContratos(); };
+    document.getElementById("con-exportar").onclick = () => exportarContratosCSV(state.conFiltrados);
+  }
+
+  function filtrarContratos(dados) {
+    const sit = document.getElementById("con-situacao").value;
+    const q = norm(document.getElementById("con-busca").value).trim();
+    return (dados.contratos || []).filter((c) => {
+      if (sit === "ativos" && c.status === "encerrado") return false;
+      if (sit && sit !== "ativos" && c.status !== sit) return false;
+      if (q && !norm(`${c.numero} ${c.fornecedor} ${c.doc} ${c.objeto} ${c.orgao}`).includes(q)) return false;
+      return true;
+    });
+  }
+
+  function contratoStatus(c) {
+    const label = { vigente: "Vigente", a_vencer: "A vencer", encerrado: "Encerrado", futuro: "Futuro" }[c.status] || c.status;
+    const cls = c.status === "a_vencer" ? "warn" : (c.status === "encerrado" ? "bad" : "ok");
+    return `<span class="pill ${cls}">${esc(label)}</span>`;
+  }
+
+  async function renderContratos() {
+    const tbody = document.querySelector("#tabela-contratos tbody");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="8" class="nota">Carregando contratos…</td></tr>`;
+    try {
+      const dados = await ensureContratos();
+      const rows = filtrarContratos(dados);
+      state.conFiltrados = rows;
+      const page = rows.slice(0, state.conLimite);
+      const m = dados.meta || {};
+      document.getElementById("con-kpis").innerHTML = [
+        card("Contratos", String(m.total || 0), `vigência ${state.meta.ano}`, "hero"),
+        card("Ativos", String(m.ativos || 0), "vigentes, a vencer ou futuros"),
+        card("Valor vigente", money(m.valor_vigente), "valor acumulado/global"),
+        card("Vencendo 90 dias", String(m.vencendo_90 || 0), "pedem ação", "alert"),
+        card("Sem disputa", m.sem_disputa_share == null ? "—" : percent(m.sem_disputa_share), `${m.sem_disputa || 0} de ${m.sem_disputa_base || 0} com compra vinculada`),
+      ].join("");
+      const venc = dados.vencendo || [];
+      document.getElementById("con-vencendo").innerHTML = venc.length
+        ? `<div class="table-wrap"><table class="mini"><thead><tr><th>Fim</th><th>Contrato</th><th>Fornecedor</th><th>Órgão</th><th class="num">Valor</th><th class="num">Dias</th></tr></thead><tbody>${venc.slice(0, 10).map((c) => `<tr><td>${esc(c.fim)}</td><td>${esc(c.numero)}</td><td>${esc(c.fornecedor)}</td><td>${esc(c.orgao)}</td><td class="num">${money(c.valor)}</td><td class="num">${c.dias_vencer}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="nota">Nenhum contrato vencendo nos próximos 90 dias.</p>`;
+      tbody.innerHTML = page.map((c) => `<tr class="clickable" data-id="${esc(c.id)}">
+        <td>${esc(c.numero)}</td><td class="forn-nome" title="${esc(c.fornecedor)}">${esc(c.fornecedor)}</td>
+        <td>${esc(c.orgao)}</td><td>${esc(c.inicio)}</td><td>${esc(c.fim)}</td>
+        <td class="num">${money(c.valor)}</td><td class="num">${c.dias_vencer}</td><td>${contratoStatus(c)}</td>
+      </tr>`).join("") || `<tr><td colspan="8" class="nota">Nenhum contrato com esse filtro.</td></tr>`;
+      document.getElementById("con-nota").textContent = `${rows.length} contrato(s) · exibindo ${page.length}`;
+      document.getElementById("con-mais").hidden = page.length >= rows.length;
+      tbody.onclick = (ev) => {
+        const tr = ev.target.closest("tr[data-id]");
+        if (!tr) return;
+        const c = rows.find((x) => x.id === tr.dataset.id);
+        if (c) abrirContrato(c);
+      };
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="8" class="nota">Não foi possível carregar: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function abrirContrato(c) {
+    document.getElementById("modal-title").textContent = `Contrato ${c.numero} · ${c.fornecedor}`;
+    const url = linkSeguro(c.url);
+    document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(c.tipo)} · ${esc(c.status)} · ${esc(c.inicio)} a ${esc(c.fim)}</p>
+      <div class="grid">${card("Valor", money(c.valor), "", "hero")}${card("Dias para vencer", String(c.dias_vencer))}${card("Aditivos", String(c.retificacoes))}${card("Sem disputa", c.sem_disputa == null ? "—" : (c.sem_disputa ? "Sim" : "Não"))}</div>
+      <p><b>Objeto:</b> ${esc(c.objeto)}</p>
+      <table class="mini"><tbody>
+        <tr><th>Processo</th><td>${esc(c.processo || "—")}</td></tr>
+        <tr><th>Compra PNCP</th><td>${esc(c.compra || "—")}</td></tr>
+        <tr><th>Fornecedor</th><td>${esc(c.fornecedor)} · ${c.doc ? esc(fmtDoc(c.doc)) : "—"}</td></tr>
+        <tr><th>Órgão</th><td>${esc(c.orgao)} · ${esc(c.unidade)}</td></tr>
+        <tr><th>Assinatura / publicação</th><td>${esc(c.assinatura || "—")} · ${esc(c.publicacao || "—")}</td></tr>
+        <tr><th>Link</th><td>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">abrir</a>` : "—"}</td></tr>
+      </tbody></table>`;
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function exportarContratosCSV(rows) {
+    baixarCSV(`painel_fiscal_contratos_${state.meta.ano}.csv`,
+      ["contrato", "fornecedor", "cnpj", "orgao", "inicio", "fim", "valor", "dias", "status", "sem_disputa", "objeto"],
+      rows.map((c) => [c.numero, c.fornecedor, c.doc, c.orgao, c.inicio, c.fim, c.valor, c.dias_vencer, c.status, c.sem_disputa, c.objeto]));
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -825,6 +1031,8 @@
     document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === id));
     if (id === "empenhos") renderEmpenhos();
     if (id === "fornecedores") renderFornecedores();
+    if (id === "licitacoes") renderLicitacoes();
+    if (id === "contratos") renderContratos();
   }
 
   async function init() {
@@ -840,6 +1048,8 @@
       renderGastos();
       initEmpenhosFiltros();
       initFornecedoresFiltros();
+      initLicitacoesFiltros();
+      initContratosFiltros();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
