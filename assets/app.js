@@ -30,6 +30,104 @@
     }).join("");
   }
 
+  const LEGENDA_EXEC = `<span><i class="sw-pago"></i>Pago</span><span><i class="sw-a-pagar"></i>Liquidado a pagar</span><span><i class="sw-a-liquidar"></i>Empenhado a liquidar</span><span><i class="sw-alerta"></i>Alerta de excesso</span>`;
+
+  function stackedBars(el, rows, opts = {}) {
+    if (!el) return;
+    if (!rows || !rows.length) {
+      el.innerHTML = `<p class="nota">Sem dados para este recorte.</p>`;
+      return;
+    }
+    const seg = (cls, v, total) => (total > 0 && v > 0.005)
+      ? `<span class="stack-seg ${cls}" style="width:${((v / total) * 100).toFixed(3)}%"></span>`
+      : "";
+    el.innerHTML = rows.map((r) => {
+      const total = Number(r.total || 0);
+      const pago = Number(r.pago || 0);
+      const aPagar = Number(r.a_pagar || 0);
+      const aLiq = Number(r.a_liquidar || 0);
+      const alertas = Array.isArray(r.alertas) ? r.alertas : [];
+      const alerta = alertas.length ? ` <span class="stack-alerta" title="${esc(alertas.join("; "))}">!</span>` : "";
+      const sub = opts.showDoc
+        ? (r.doc ? fmtDoc(r.doc) : (r.folha ? "folha/encargo" : "sem CNPJ"))
+        : (r.entidade || "");
+      const title = `${r.nome}${r.doc ? ` · ${fmtDoc(r.doc)}` : ""}\nEmpenhado ${money(r.emp)} · Liquidado ${money(r.liq)} · Pago ${money(r.pago)}\nA liquidar ${money(aLiq)} · A pagar ${money(aPagar)}${alertas.length ? `\nAtenção: ${alertas.join("; ")}` : ""}`;
+      const totalNote = total > Number(r.emp || 0) + 0.005 ? `<small>maior etapa ${money(total)}</small>` : "";
+      return `<div class="stack-row" title="${esc(title)}">
+        <span class="stack-label">${esc(r.nome)}${alerta}<small>${esc(sub)}</small></span>
+        <span class="stack-track">${seg("pago", pago, total)}${seg("a-pagar", aPagar, total)}${seg("a-liquidar", aLiq, total)}</span>
+        <span class="stack-total">${money(r.emp)}${totalNote}</span>
+        <span class="stack-diffs">pago ${money(pago)} · a pagar ${money(aPagar)} · a liquidar ${money(aLiq)}</span>
+      </div>`;
+    }).join("");
+  }
+
+  function renderExecTabela(id, rows, showDoc) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const head = showDoc
+      ? "<th>Fornecedor</th><th>CNPJ</th>"
+      : "<th>Órgão</th><th>Entidade</th>";
+    el.innerHTML = `<div class="table-wrap"><table class="mini"><thead><tr>${head}<th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">A liquidar</th><th class="num">A pagar</th></tr></thead><tbody>${rows.map((r) => `<tr>
+      <td>${esc(r.nome)}</td><td>${esc(showDoc ? (r.doc ? fmtDoc(r.doc) : "—") : (r.entidade || ""))}</td>
+      <td class="num">${money(r.emp)}</td><td class="num">${money(r.liq)}</td><td class="num">${money(r.pago)}</td>
+      <td class="num">${money(r.a_liquidar)}</td><td class="num">${money(r.a_pagar)}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+  }
+
+  function exportarExecCSV(rows, showDoc, nome) {
+    const header = showDoc
+      ? ["fornecedor", "cnpj", "empenhado", "liquidado", "pago", "a_liquidar", "a_pagar", "total"]
+      : ["orgao", "entidade", "empenhado", "liquidado", "pago", "a_liquidar", "a_pagar", "total"];
+    const lines = [header, ...rows.map((r) => showDoc
+      ? [r.nome, r.doc || "", r.emp, r.liq, r.pago, r.a_liquidar, r.a_pagar, r.total]
+      : [r.nome, r.entidade || "", r.emp, r.liq, r.pago, r.a_liquidar, r.a_pagar, r.total])];
+    const csv = lines.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `painel_fiscal_${nome}_${state.meta.ano}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function renderExecucao() {
+    const ex = state.panorama?.execucao || {};
+    const incluir = document.getElementById("incluir-folha")?.checked;
+    const unidades = ex.por_unidade || [];
+    const credores = (incluir ? ex.por_credor_com_folha : ex.por_credor) || [];
+    document.getElementById("legenda-execucao").innerHTML = LEGENDA_EXEC;
+    document.getElementById("legenda-credores").innerHTML = LEGENDA_EXEC;
+    stackedBars(document.getElementById("execucao-unidades"), unidades, { showDoc: false });
+    stackedBars(document.getElementById("execucao-credores"), credores, { showDoc: true });
+
+    const fonteEl = document.getElementById("fonte-execucao");
+    if (fonteEl) {
+      const fontes = (ex.fontes || []).map((f) => `${f.entidade}: ${f.ate || "—"}`).join(" · ");
+      fonteEl.textContent = fontes ? `Fonte: empenhos · ${fontes}.` : "";
+    }
+
+    const exd = ex.excluidos || {};
+    const nota = document.getElementById("execucao-nota");
+    if (nota) {
+      nota.textContent = incluir
+        ? "Incluindo folha e encargos. Pessoas físicas aparecem agregadas, sem nome ou documento."
+        : `Excluídos por padrão (${money(ex.excluidos_total)}): folha ${money(exd.folha)} · auxílio-alimentação ${money(exd.auxilio)} · INSS ${money(exd.inss)} · PASEP ${money(exd.pasep)}${exd.fgts ? ` · FGTS ${money(exd.fgts)}` : ""} · entes públicos ${money(exd.entes_publicos)}. Pessoas físicas aparecem agregadas, sem nome ou documento.`;
+    }
+
+    renderExecTabela("tabela-execucao-unidades", unidades, false);
+    renderExecTabela("tabela-execucao-credores", credores, true);
+
+    const toggle = document.getElementById("incluir-folha");
+    if (toggle) toggle.onchange = renderExecucao;
+    document.querySelectorAll("[data-export-exec]").forEach((b) => {
+      b.onclick = () => {
+        const showDoc = b.dataset.exportExec === "credores";
+        exportarExecCSV(showDoc ? credores : unidades, showDoc, b.dataset.exportExec);
+      };
+    });
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -59,12 +157,13 @@
 
     const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq]));
     const ent = p.entidades || [];
-    document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dota??o</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provis?ria</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
+    document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dotação</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provisória</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
     document.getElementById("mensal").innerHTML = (p.mensal || []).map((m) => {
       const he = Math.max(1, (m.emp / max) * 100);
       const hl = Math.max(1, (m.liq / max) * 100);
       return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span></div><span>${esc(m.nome)}</span></div>`;
     }).join("");
+    renderExecucao();
   }
 
   function renderDespesas() {

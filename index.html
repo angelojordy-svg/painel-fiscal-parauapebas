@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021092202">
+<link rel="stylesheet" href="assets/app.css?v=20261021110334">
 </head>
 <body>
 <header>
@@ -47,6 +47,39 @@
       <h2>Por entidade</h2>
       <div id="entidades"></div>
     </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Para onde o dinheiro foi</h2>
+        <span class="nota">12 maiores órgãos por empenhado · pago, liquidado a pagar e empenhado a liquidar</span>
+      </div>
+      <div id="legenda-execucao" class="legend"></div>
+      <div id="execucao-unidades" class="stack-bars"></div>
+      <p class="nota">“A pagar” = liquidado − pago; “A liquidar” = empenhado − liquidado. Barra = empenhado.</p>
+      <p id="fonte-execucao" class="nota"></p>
+      <details class="exec-detalhe">
+        <summary>Ver tabela e exportar</summary>
+        <div id="tabela-execucao-unidades"></div>
+        <button class="btn ghost" type="button" data-export-exec="unidades">Exportar CSV</button>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Quem mais recebeu</h2>
+        <span class="nota">15 maiores por empenhado · CNPJ de empresa</span>
+        <label class="toggle"><input type="checkbox" id="incluir-folha"> Incluir folha e encargos</label>
+      </div>
+      <div id="legenda-credores" class="legend"></div>
+      <div id="execucao-credores" class="stack-bars"></div>
+      <p id="execucao-nota" class="nota"></p>
+      <details class="exec-detalhe">
+        <summary>Ver tabela e exportar</summary>
+        <div id="tabela-execucao-credores"></div>
+        <button class="btn ghost" type="button" data-export-exec="credores">Exportar CSV</button>
+      </details>
+    </section>
+
     <div class="two">
       <section class="panel">
         <h2>Maiores unidades por empenhado</h2>
@@ -135,6 +168,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021092202" defer></script>
+<script src="assets/app.js?v=20261021110334" defer></script>
 </body>
 </html>
