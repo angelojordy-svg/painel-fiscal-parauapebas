@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021091026">
+<link rel="stylesheet" href="assets/app.css?v=20261021092202">
 </head>
 <body>
 <header>
@@ -78,7 +78,7 @@
     <div class="panel">
       <div class="table-head">
         <h2>Demonstrativo por natureza da despesa</h2>
-        <span class="nota">13º somente em 3.1.90.* · projeção é alerta, não saldo para empenhar</span>
+        <span class="nota">Clique numa linha para ver programas e credores · 13º somente em 3.1.90.* · projeção é alerta, não saldo para empenhar</span>
       </div>
       <div class="table-wrap">
         <table id="tabela-despesas">
@@ -121,9 +121,20 @@
   </section>
 </main>
 
+<div id="modal" class="modal" hidden>
+  <div class="modal-backdrop" data-fechar="1"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h2 id="modal-title">Detalhes</h2>
+      <button id="modal-close" class="btn ghost" type="button">Fechar</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021091026" defer></script>
+<script src="assets/app.js?v=20261021092202" defer></script>
 </body>
 </html>

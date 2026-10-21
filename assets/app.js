@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, conferencia: null, sobre: null, unidade: null };
+  const state = { meta: null, panorama: null, despesas: null, conferencia: null, sobre: null, unidade: null, detalhes: {} };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -80,6 +80,10 @@
     document.getElementById("filtro-busca").oninput = () => renderDespesasUnit();
     document.getElementById("exportar-csv").onclick = exportarCSV;
     renderDespesasUnit();
+    document.querySelector("#tabela-despesas tbody").onclick = (e) => {
+      const tr = e.target.closest("tr[data-cod]");
+      if (tr) abrirDetalhe(tr.dataset.cod);
+    };
   }
 
   function renderDespesasUnit() {
@@ -103,7 +107,7 @@
     const tbody = document.querySelector("#tabela-despesas tbody");
     tbody.innerHTML = rows.map((n) => {
       const alerta = (n.alertas || []).join("; ");
-      return `<tr>
+      return `<tr class="clickable" data-cod="${esc(n.cod)}" title="Clique para ver programas e credores">
         <td class="cod" title="${esc(alerta)}">${esc(n.cod)}${alerta ? ` <span class="dot" title="${esc(alerta)}">!</span>` : ""}</td><td>${esc(n.nome)}</td>
         <td class="num">${money(n.dot_atu)}</td><td class="num">${money(n.emp_ytd)}</td>
         <td class="num">${money(n.liq_ytd)}</td><td class="num">${money(n.pago_ytd)}</td>
@@ -161,7 +165,50 @@
       <h3>Cobertura</h3><p>${esc(JSON.stringify(m.cobertura))}</p>`;
   }
 
+  const fmtDoc = (d) => (d && d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : "—");
+
+  async function abrirDetalhe(cod) {
+    const u = state.despesas.unidades.find((x) => x.unid === state.unidade);
+    if (!u) return;
+    const key = `${u.slug}_${String(u.unid).padStart(2, "0")}`;
+    let dados = state.detalhes[key];
+    if (!dados) {
+      try {
+        dados = await json(`detalhes_${key}`);
+        state.detalhes[key] = dados;
+      } catch (e) {
+        dados = null;
+      }
+    }
+    const nat = dados?.naturezas?.[cod];
+    const nomeNat = u.naturezas.find((n) => n.cod === cod)?.nome || "";
+    document.getElementById("modal-title").textContent = `${u.entidade} · ${u.nome} · ${cod}`;
+    const body = document.getElementById("modal-body");
+    if (!nat) {
+      body.innerHTML = `<p class="nota">Sem detalhamento de programas/credores para <b>${esc(cod)} ${esc(nomeNat)}</b>.<br>Fonte: ${esc(dados?.fonte || "liquidações")}${dados?.ate ? ` até ${esc(dados.ate)}` : ""}.</p>`;
+    } else {
+      const progs = nat.programas || [];
+      const creds = nat.credores || [];
+      const progsHtml = progs.length
+        ? `<table class="mini"><thead><tr><th>Programa</th><th>Ação</th><th class="num">Liquidado</th></tr></thead><tbody>${progs.map((p) => `<tr><td>${esc(p.programa)}</td><td>${esc(p.acao)}</td><td class="num">${money(p.liq)}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="nota">Sem programas.</p>`;
+      const credsHtml = creds.length
+        ? `<table class="mini"><thead><tr><th>Credor</th><th>CNPJ</th><th class="num">Liquidado</th></tr></thead><tbody>${creds.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(fmtDoc(c.doc))}</td><td class="num">${money(c.liq)}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="nota">Sem credores.</p>`;
+      body.innerHTML = `<p class="nota">${esc(cod)} · ${esc(nomeNat)} · liquidado até ${esc(dados.ate || "—")} · fonte ${esc(dados.fonte || "—")} · sem CPF.</p><div class="grid2"><div><h3>Programas / ações</h3>${progsHtml}</div><div><h3>Credores</h3>${credsHtml}</div></div>`;
+    }
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function fecharModal() {
+    const modal = document.getElementById("modal");
+    if (modal) modal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
   function showTab() {
+    fecharModal();
     const id = (location.hash || "#panorama").replace("#", "");
     document.querySelectorAll(".tab").forEach((el) => { el.hidden = el.id !== id; });
     document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === id));
@@ -176,11 +223,26 @@
       Object.assign(state, { panorama, despesas, conferencia, sobre });
       renderPanorama();
       renderDespesas();
+      const params = new URLSearchParams(location.search);
+      const unidParam = Number(params.get("unid"));
+      if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
+        state.unidade = unidParam;
+        document.getElementById("filtro-unidade").value = String(unidParam);
+        renderDespesasUnit();
+      }
+      const codParam = params.get("cod");
+      if (codParam) {
+        if (!location.hash) location.hash = "#despesas";
+        setTimeout(() => abrirDetalhe(codParam), 200);
+      }
       renderConferencia();
       renderSobre();
       document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
       showTab();
       window.addEventListener("hashchange", showTab);
+      document.getElementById("modal-close").onclick = fecharModal;
+      document.querySelector("#modal .modal-backdrop").onclick = fecharModal;
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharModal(); });
     } catch (e) {
       const el = document.getElementById("erro");
       el.hidden = false;
