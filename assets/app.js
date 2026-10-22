@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [] };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [], cfem: null, cfemFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const pct2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1176,6 +1176,138 @@
     renderAlugueis();
   }
 
+  function cfemTexto(r) {
+    return norm(`${r.nome || ""} ${r.unidade || ""} ${r.programa || ""} ${r.acao || ""} ${r.entidade || ""}`);
+  }
+
+  function filtrarCfemDestinos(rec) {
+    const q = norm(document.getElementById("cfem-busca")?.value).trim();
+    return (rec.destinos || []).filter((r) => !q || cfemTexto(r).includes(q));
+  }
+
+  function filtrarCfemCredores(rec) {
+    const q = norm(document.getElementById("cfem-busca")?.value).trim();
+    return (rec.credores || []).filter((r) => !q || norm(`${r.nome || ""} ${r.doc || ""}`).includes(q));
+  }
+
+  function renderCfemAlertas(rec) {
+    const el = document.getElementById("cfem-alertas");
+    if (!el) return;
+    const alertas = rec.alertas || [];
+    const conf = rec.conferencia || {};
+    const exec = conf.execucao || {};
+    const receita = conf.receita || {};
+    const cls = { warn: "warn", bad: "bad", info: "ok" };
+    const lista = alertas.map((a) => `<div class="alug-alerta"><div class="alug-alerta-head"><span class="pill ${cls[a.severidade] || "warn"}">${esc(a.titulo)}</span></div><p class="nota">${esc(a.detalhe)}</p></div>`).join("");
+    const execOk = exec.status === "ok";
+    const confHtml = `<div class="alug-alerta"><div class="alug-alerta-head"><span class="pill ${execOk ? "ok" : "bad"}">Conferência da execução: ${execOk ? "ok" : "divergente"}</span></div><p class="nota">Fonte ${esc(exec.fonte || "17080000")}: gastos ${money(exec.gastos)} · CFEM ${money(exec.cfem)} · diferença ${money(exec.diff)}. Receita comparável (meses em que ANM e portal têm valor): ANM ${money(receita.anm_comparavel)} · portal ${money(receita.portal_comparavel)} · diferença ${money(receita.diff_comparavel)}.</p></div>`;
+    el.innerHTML = lista + confHtml || `<div class="alug-alerta"><span class="pill ok">Sem alertas</span></div>`;
+  }
+
+  function renderCfemMensal(rec) {
+    const tbody = document.querySelector("#tabela-cfem-mensal tbody");
+    if (!tbody) return;
+    tbody.innerHTML = (rec.mensal || []).map((m) => {
+      const dif = Number(m.pago || 0) - Number(m.portal || 0);
+      const cl = dif > 0.005 ? "bad" : "";
+      return `<tr>
+        <td>${esc(m.nome)}</td>
+        <td class="num">${money(m.anm)}</td>
+        <td class="num">${money(m.portal)}</td>
+        <td class="num">${money(m.emp)}</td>
+        <td class="num">${money(m.liq)}</td>
+        <td class="num">${money(m.pago)}</td>
+        <td class="num ${cl}">${money(dif)}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="7" class="nota">Sem dados mensais.</td></tr>`;
+  }
+
+  function renderCfemTabela(id, rows, cols, vazio) {
+    const tbody = document.querySelector(`#${id} tbody`);
+    if (!tbody) return;
+    tbody.innerHTML = (rows || []).map((r) => `<tr>${cols.map((c) => `<td class="${c.num ? "num" : ""}">${c.fmt ? c.fmt(r[c.key]) : esc(r[c.key] ?? "")}</td>`).join("")}</tr>`).join("")
+      || `<tr><td colspan="${cols.length}" class="nota">${vazio}</td></tr>`;
+  }
+
+  function renderCfemDestinos(rows) {
+    const tbody = document.querySelector("#tabela-cfem-destinos tbody");
+    if (!tbody) return;
+    tbody.innerHTML = (rows || []).map((r) => `<tr>
+      <td>${esc(r.nome || "")}</td>
+      <td>${esc(r.programa || "—")}</td>
+      <td>${esc(r.acao || "—")}</td>
+      <td class="num">${money(r.emp)}</td>
+      <td class="num">${money(r.liq)}</td>
+      <td class="num">${money(r.pago)}</td>
+      <td class="num">${money(r.a_pagar)}</td>
+      <td class="num">${r.emp ? percent(r.pago / r.emp) : "—"}</td>
+    </tr>`).join("") || `<tr><td colspan="8" class="nota">Nenhum destino com esse filtro.</td></tr>`;
+  }
+
+  function exportarCfemMensalCSV(rec) {
+    baixarCSV(`painel_fiscal_cfem_mensal_${state.meta.ano}.csv`,
+      ["mes", "anm", "portal", "empenhado", "liquidado", "pago", "pago_menos_portal"],
+      (rec.mensal || []).map((m) => [m.nome, m.anm, m.portal, m.emp, m.liq, m.pago, Number(m.pago || 0) - Number(m.portal || 0)]));
+  }
+
+  function exportarCfemDestinosCSV(rows) {
+    baixarCSV(`painel_fiscal_cfem_destinos_${state.meta.ano}.csv`,
+      ["unidade", "programa", "acao", "empenhado", "liquidado", "pago", "a_pagar", "a_liquidar"],
+      rows.map((r) => [r.nome, r.programa, r.acao, r.emp, r.liq, r.pago, r.a_pagar, r.a_liquidar]));
+  }
+
+  function renderCfem() {
+    const rec = state.cfem;
+    if (!rec) return;
+    const m = rec.meta || {};
+    const k = rec.kpis || {};
+    const destinos = filtrarCfemDestinos(rec);
+    const credores = filtrarCfemCredores(rec);
+    state.cfemFiltrados = destinos;
+
+    document.getElementById("cfem-kpis").innerHTML = [
+      cardMoney("Recebida (ANM)", k.recebida_anm, `competência até ${m.distribuicao_ate || "—"}`, "hero"),
+      cardMoney("Prevista na LOA", k.prev_atualizada, k.prev_inicial !== k.prev_atualizada ? `inicial ${money(k.prev_inicial)}` : "previsão atualizada"),
+      cardMoney("Arrecadada (portal)", k.arrecadada_portal, `${percent(k.pct_previsto || 0)} da previsão`, k.pct_previsto && k.pct_previsto < 0.7 ? "alert" : ""),
+      cardMoney("Empenhado (fonte 17080000)", k.emp, `até ${m.execucao_ate || "—"}`),
+      cardMoney("Liquidado", k.liq, k.emp ? `${percent(k.liq / k.emp)} do empenhado` : ""),
+      cardMoney("Pago", k.pago, k.emp ? `${percent(k.pago / k.emp)} do empenhado` : ""),
+      cardMoney("Saldo do exercício", k.saldo_exercicio, "arrecadado no portal − pago", k.saldo_exercicio < 0 ? "alert" : ""),
+      card("Execução da receita", percent2(k.pct_execucao || 0), "pago ÷ arrecadado no portal"),
+    ].join("");
+    document.getElementById("cfem-nota").textContent = `${destinos.length} destino(s) · ${credores.length} credor(es) · ANM ${m.distribuicao_ate || "—"} · portal ${m.arrecadacao_ate || "—"}`;
+
+    renderCfemAlertas(rec);
+    renderCfemMensal(rec);
+    renderCfemTabela("tabela-cfem-substancias", rec.substancias || [], [
+      { key: "nome", fmt: (v) => esc(v || "") },
+      { key: "valor", num: true, fmt: money },
+      { key: "participacao", num: true, fmt: percent2 },
+    ], "Sem distribuição por substância.");
+    renderCfemTabela("tabela-cfem-tipos", rec.tipos || [], [
+      { key: "nome", fmt: (v) => esc(v || "") },
+      { key: "valor", num: true, fmt: money },
+      { key: "participacao", num: true, fmt: percent2 },
+    ], "Sem distribuição por tipo.");
+    renderCfemDestinos(destinos);
+    renderCfemTabela("tabela-cfem-credores", credores, [
+      { key: "nome", fmt: (v) => esc(v || "") },
+      { key: "doc", fmt: (v) => (v ? esc(fmtDoc(v)) : "—") },
+      { key: "emp", num: true, fmt: money },
+      { key: "liq", num: true, fmt: money },
+      { key: "pago", num: true, fmt: money },
+    ], "Nenhum credor com esse filtro.");
+  }
+
+  function initCfemFiltros() {
+    const busca = document.getElementById("cfem-busca");
+    if (!busca) return;
+    busca.oninput = () => renderCfem();
+    document.getElementById("cfem-exportar").onclick = () => exportarCfemMensalCSV(state.cfem || {});
+    document.getElementById("cfem-exportar-exec").onclick = () => exportarCfemDestinosCSV(state.cfemFiltrados || []);
+    renderCfem();
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -1366,16 +1498,17 @@
     if (id === "licitacoes") renderLicitacoes();
     if (id === "contratos") renderContratos();
     if (id === "alugueis") renderAlugueis();
+    if (id === "cfem") renderCfem();
   }
 
   async function init() {
     try {
       state.meta = await json("meta");
-      const [panorama, despesas, gastos, receitas, alugueis, conferencia, sobre] = await Promise.all([
+      const [panorama, despesas, gastos, receitas, alugueis, cfem, conferencia, sobre] = await Promise.all([
         json("panorama"), json("despesas"), json("gastos"), json("receitas"),
-        json("alugueis"), json("conferencia"), json("sobre"),
+        json("alugueis"), json("cfem"), json("conferencia"), json("sobre"),
       ]);
-      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, alugueis, conferencia, sobre });
+      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, alugueis, cfem, conferencia, sobre });
       renderPanorama();
       renderDespesas();
       renderGastosFiltros();
@@ -1386,6 +1519,7 @@
       initLicitacoesFiltros();
       initContratosFiltros();
       initAlugueisFiltros();
+      initCfemFiltros();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {

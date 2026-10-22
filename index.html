@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261022095352">
+<link rel="stylesheet" href="assets/app.css?v=20261022101405">
 </head>
 <body>
 <header>
@@ -29,8 +29,10 @@
   <a href="#fornecedores" data-tab="fornecedores">Fornecedores</a>
   <a href="#licitacoes" data-tab="licitacoes">Licitações</a>
   <a href="#contratos" data-tab="contratos">Contratos</a>
-  <a href="#alugueis" data-tab="alugueis">Aluguéis</a>
-  <a href="#conferencia" data-tab="conferencia">Conferência</a>
+    <a href="#alugueis" data-tab="alugueis">Aluguéis</a>
+    <a href="#cfem" data-tab="cfem">CFEM</a>
+    <a href="#conferencia" data-tab="conferencia">Conferência</a>
+
   <a href="#sobre" data-tab="sobre">Sobre os dados</a>
 </nav>
 
@@ -524,6 +526,99 @@
     </section>
   </section>
 
+  <section id="cfem" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Buscar destino
+        <input id="cfem-busca" type="search" placeholder="unidade, programa, ação ou credor">
+      </label>
+      <button id="cfem-exportar" class="btn ghost" type="button">CSV mensal</button>
+      <button id="cfem-exportar-exec" class="btn ghost" type="button">CSV destinos</button>
+      <span id="cfem-nota" class="nota"></span>
+    </div>
+
+    <div id="cfem-kpis" class="grid"></div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Alertas e conferência</h2>
+        <span class="nota">ANM (competência) × portal (caixa) × fonte 17080000</span>
+      </div>
+      <div id="cfem-alertas" class="alug-alertas"></div>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Reconciliação mensal</h2>
+        <span class="nota">recebida (ANM) · arrecadada (portal) · executada (empenhado/liquidado/pago)</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-cfem-mensal" class="mini">
+          <thead>
+            <tr><th>Mês</th><th class="num">ANM</th><th class="num">Portal</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Pago − portal</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="two">
+      <section class="panel">
+        <div class="table-head">
+          <h2>Por substância</h2>
+          <span class="nota">distribuição ANM no ano</span>
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-cfem-substancias" class="mini">
+            <thead><tr><th>Substância</th><th class="num">Valor</th><th class="num">%</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="table-head">
+          <h2>Por tipo de distribuição</h2>
+          <span class="nota">produtor, afetado etc.</span>
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-cfem-tipos" class="mini">
+            <thead><tr><th>Tipo</th><th class="num">Valor</th><th class="num">%</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Execução por destino</h2>
+        <span class="nota">fonte 17080000 · todos os destinos com execução</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-cfem-destinos" class="mini">
+          <thead>
+            <tr><th>Unidade</th><th>Programa</th><th>Ação</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">A pagar</th><th class="num">% pago</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Maiores credores</h2>
+        <span class="nota">pessoa física agregada, sem CPF</span>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-cfem-credores" class="mini">
+          <thead>
+            <tr><th>Credor</th><th>CNPJ</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
   <section id="conferencia" class="tab" hidden>
     <div id="conferencia-kpis" class="grid"></div>
     <div class="panel">
@@ -561,6 +656,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261022095352" defer></script>
+<script src="assets/app.js?v=20261022101405" defer></script>
 </body>
 </html>
