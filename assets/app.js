@@ -3,12 +3,14 @@
   const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const pct2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = (v) => {
     const n = Number(v || 0);
     return brl.format(Math.abs(n) < 0.005 ? 0 : n);
   };
   const percent = (v) => `${pct.format(Number(v || 0) * 100)}%`;
+  const percent2 = (v) => `${pct2.format(Number(v || 0) * 100)}%`;
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   async function json(name) {
@@ -906,7 +908,7 @@
       <td class="num">${money(e.prev_atualizada)}</td>
       <td class="num">${money(e.propria)}</td>
       <td class="num">${money(e.transferencias)}</td>
-      <td class="num">${percent(e.dependencia)}</td>
+      <td class="num">${percent2(e.dependencia)}</td>
     </tr>`).join("") || `<tr><td colspan="6" class="nota">Sem entidades com receita.</td></tr>`;
   }
 
@@ -957,7 +959,7 @@
       card("Previsto atualizado", money(prevAtu), prevAtu ? `${percent(total / prevAtu)} arrecadado` : ""),
       card("Receita própria", money(propria), total ? `${percent(propria / total)} do arrecadado` : ""),
       card("Transferências", money(transf), total ? `${percent(transf / total)} do arrecadado` : ""),
-      card("Dependência de transferências", percent(m.dependencia), "transferências ÷ arrecadado"),
+      card("Dependência de transferências", percent2(m.dependencia), "transferências ÷ arrecadado"),
     ].join("");
     renderRecMensal(document.getElementById("rec-mensal"), rec.mensal || []);
     renderRecOrigens(rec);
