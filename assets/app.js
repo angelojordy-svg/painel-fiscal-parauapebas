@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [] };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -845,6 +845,135 @@
       rows.map((c) => [c.numero, c.fornecedor, c.doc, c.orgao, c.inicio, c.fim, c.valor, c.dias_vencer, c.status, c.sem_disputa, c.objeto]));
   }
 
+  function recOrigemLabel(prefixo) {
+    const o = (state.receitas?.origens || []).find((x) => x.codigo.slice(0, 5) === prefixo);
+    return o ? `${o.codigo} · ${o.nome}` : prefixo;
+  }
+
+  function filtrarRubricas(rec) {
+    const q = norm(document.getElementById("rec-busca")?.value).trim();
+    return (rec.rubricas || []).filter((r) => {
+      if (state.recOrigem && !r.codigo.startsWith(state.recOrigem)) return false;
+      if (q && !norm(`${r.codigo} ${r.nome}`).includes(q)) return false;
+      return true;
+    });
+  }
+
+  function renderRecMensal(el, rows) {
+    if (!el) return;
+    const max = Math.max(1, ...(rows || []).map((m) => Number(m.total || 0)));
+    el.innerHTML = (rows || []).map((m) => {
+      const total = Number(m.total || 0);
+      const proprio = Number(m.propria || 0);
+      const transf = Number(m.transferencias || 0);
+      const hp = (proprio / max) * 100;
+      const ht = (transf / max) * 100;
+      return `<div class="mes" title="${esc(m.nome)} · total ${money(total)} · própria ${money(proprio)} · transferências ${money(transf)}"><div class="col-rec"><span class="seg-transf" style="height:${ht.toFixed(2)}%"></span><span class="seg-propria" style="height:${hp.toFixed(2)}%"></span></div><span>${esc(m.nome)}</span></div>`;
+    }).join("");
+  }
+
+  function renderRecOrigens(rec) {
+    const tbody = document.querySelector("#tabela-rec-origens tbody");
+    if (!tbody) return;
+    const total = Number(rec.meta?.total || 0);
+    tbody.innerHTML = (rec.origens || []).map((o) => {
+      const prefixo = o.codigo.slice(0, 5);
+      const ativo = state.recOrigem === prefixo;
+      return `<tr class="clickable${ativo ? " ativo" : ""}" data-origem="${esc(prefixo)}" title="Clique para filtrar as rubricas desta origem">
+        <td><span class="cod">${esc(prefixo)}</span> ${esc(o.nome)}</td>
+        <td>${esc(o.grupo || "")}</td>
+        <td class="num">${money(o.prev_atualizada)}</td>
+        <td class="num">${money(o.arrecadado)}</td>
+        <td class="num">${o.prev_atualizada ? percent(o.arrecadado / o.prev_atualizada) : "—"}</td>
+        <td class="num">${total ? percent(o.arrecadado / total) : "—"}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="6" class="nota">Sem origens.</td></tr>`;
+    tbody.onclick = (ev) => {
+      const tr = ev.target.closest("tr[data-origem]");
+      if (!tr) return;
+      const prefixo = tr.dataset.origem;
+      state.recOrigem = state.recOrigem === prefixo ? "" : prefixo;
+      renderReceitas();
+    };
+  }
+
+  function renderRecEntidades(rec) {
+    const tbody = document.querySelector("#tabela-rec-entidades tbody");
+    if (!tbody) return;
+    tbody.innerHTML = (rec.entidades || []).map((e) => `<tr>
+      <td>${esc(e.nome)}</td>
+      <td class="num">${money(e.total)}</td>
+      <td class="num">${money(e.prev_atualizada)}</td>
+      <td class="num">${money(e.propria)}</td>
+      <td class="num">${money(e.transferencias)}</td>
+      <td class="num">${percent(e.dependencia)}</td>
+    </tr>`).join("") || `<tr><td colspan="6" class="nota">Sem entidades com receita.</td></tr>`;
+  }
+
+  function renderRecRubricas(rec) {
+    const tbody = document.querySelector("#tabela-rec-rubricas tbody");
+    if (!tbody) return;
+    const rows = filtrarRubricas(rec);
+    state.recFiltrados = rows;
+    const total = Number(rec.meta?.total || 0);
+    const page = rows.slice(0, 100);
+    tbody.innerHTML = page.map((r) => `<tr>
+      <td class="cod">${esc(r.codigo)}</td>
+      <td style="padding-left:${Math.min(Number(r.nivel || 0), 8) * 8 + 7}px">${esc(r.nome)}</td>
+      <td class="num">${money(r.prev_inicial)}</td>
+      <td class="num">${money(r.prev_atualizada)}</td>
+      <td class="num">${money(r.arrecadado)}</td>
+      <td class="num">${r.prev_atualizada ? percent(r.arrecadado / r.prev_atualizada) : "—"}</td>
+      <td class="num">${total ? percent(r.arrecadado / total) : "—"}</td>
+    </tr>`).join("") || `<tr><td colspan="7" class="nota">Nenhuma rubrica com esse filtro.</td></tr>`;
+    const nota = document.getElementById("rec-nota");
+    if (nota) {
+      const filtro = state.recOrigem ? `origem ${recOrigemLabel(state.recOrigem)}` : "todas as origens";
+      nota.textContent = `${rows.length} rubrica(s) · ${filtro} · exibindo ${page.length}`;
+    }
+    const limpar = document.getElementById("rec-limpar");
+    if (limpar) limpar.hidden = !state.recOrigem;
+  }
+
+  function exportarReceitasCSV(rows) {
+    const total = Number(state.receitas?.meta?.total || 0);
+    baixarCSV(`painel_fiscal_receitas_${state.recOrigem ? state.recOrigem.replace(/\W/g, "") : "todas"}_${state.meta.ano}.csv`,
+      ["codigo", "especificacao", "nivel", "prev_inicial", "prev_atualizada", "arrecadado", "percentual_da_previsao", "percentual_do_total"],
+      rows.map((r) => [r.codigo, r.nome, r.nivel, r.prev_inicial, r.prev_atualizada, r.arrecadado,
+        r.prev_atualizada ? r.arrecadado / r.prev_atualizada : "", total ? r.arrecadado / total : ""]));
+  }
+
+  function renderReceitas() {
+    const rec = state.receitas;
+    if (!rec) return;
+    const m = rec.meta || {};
+    const total = Number(m.total || 0);
+    const prevAtu = Number(m.prev_atualizada || 0);
+    const propria = Number(m.propria || 0);
+    const transf = Number(m.transferencias || 0);
+    document.getElementById("rec-kpis").innerHTML = [
+      card("Arrecadado", money(total), "jan-out/2026 · out parcial", "hero"),
+      card("Previsto inicial", money(m.prev_inicial), "LOA 2026"),
+      card("Previsto atualizado", money(prevAtu), prevAtu ? `${percent(total / prevAtu)} arrecadado` : ""),
+      card("Receita própria", money(propria), total ? `${percent(propria / total)} do arrecadado` : ""),
+      card("Transferências", money(transf), total ? `${percent(transf / total)} do arrecadado` : ""),
+      card("Dependência de transferências", percent(m.dependencia), "transferências ÷ arrecadado"),
+    ].join("");
+    renderRecMensal(document.getElementById("rec-mensal"), rec.mensal || []);
+    renderRecOrigens(rec);
+    renderRecEntidades(rec);
+    renderRecRubricas(rec);
+  }
+
+  function initReceitas() {
+    const busca = document.getElementById("rec-busca");
+    if (!busca) return;
+    busca.oninput = () => renderReceitas();
+    document.getElementById("rec-exportar").onclick = () => exportarReceitasCSV(state.recFiltrados || []);
+    document.getElementById("rec-limpar").onclick = () => { state.recOrigem = ""; renderReceitas(); };
+    renderReceitas();
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -1029,6 +1158,7 @@
     const id = (location.hash || "#panorama").replace("#", "");
     document.querySelectorAll(".tab").forEach((el) => { el.hidden = el.id !== id; });
     document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === id));
+    if (id === "receitas") renderReceitas();
     if (id === "empenhos") renderEmpenhos();
     if (id === "fornecedores") renderFornecedores();
     if (id === "licitacoes") renderLicitacoes();
@@ -1038,14 +1168,15 @@
   async function init() {
     try {
       state.meta = await json("meta");
-      const [panorama, despesas, gastos, conferencia, sobre] = await Promise.all([
-        json("panorama"), json("despesas"), json("gastos"), json("conferencia"), json("sobre"),
+      const [panorama, despesas, gastos, receitas, conferencia, sobre] = await Promise.all([
+        json("panorama"), json("despesas"), json("gastos"), json("receitas"), json("conferencia"), json("sobre"),
       ]);
-      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, conferencia, sobre });
+      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, conferencia, sobre });
       renderPanorama();
       renderDespesas();
       renderGastosFiltros();
       renderGastos();
+      initReceitas();
       initEmpenhosFiltros();
       initFornecedoresFiltros();
       initLicitacoesFiltros();

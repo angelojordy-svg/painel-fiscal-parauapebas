@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261021135325">
+<link rel="stylesheet" href="assets/app.css?v=20261022083221">
 </head>
 <body>
 <header>
@@ -22,6 +22,7 @@
 
 <nav class="tabs wrap" aria-label="Seções">
   <a href="#panorama" data-tab="panorama">Panorama</a>
+  <a href="#receitas" data-tab="receitas">Receitas</a>
   <a href="#despesas" data-tab="despesas">Demonstrativo</a>
   <a href="#gastos" data-tab="gastos">Gastos</a>
   <a href="#empenhos" data-tab="empenhos">Empenhos</a>
@@ -99,6 +100,77 @@
       <h2>Movimento mensal</h2>
       <div class="legend"><span><i class="sw-emp"></i>Empenhado</span><span><i class="sw-liq"></i>Liquidado</span><span><i class="sw-pago"></i>Pago</span></div>
       <div id="mensal" class="mensal"></div>
+    </section>
+  </section>
+
+  <section id="receitas" class="tab" hidden>
+    <div class="filtros panel">
+      <label>Buscar rubrica
+        <input id="rec-busca" type="search" placeholder="código ou descrição">
+      </label>
+      <button id="rec-exportar" class="btn ghost" type="button">Exportar CSV</button>
+      <span id="rec-nota" class="nota"></span>
+    </div>
+
+    <div id="rec-kpis" class="grid"></div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Curva mensal da arrecadação</h2>
+        <span class="nota">receita própria × transferências · jan-out/2026 (out é parcial)</span>
+      </div>
+      <div class="legend">
+        <span><i class="sw-rec-propria"></i>Receita própria</span>
+        <span><i class="sw-rec-transf"></i>Transferências</span>
+      </div>
+      <div id="rec-mensal" class="mensal"></div>
+    </section>
+
+    <div class="two">
+      <section class="panel">
+        <div class="table-head">
+          <h2>Por origem</h2>
+          <span class="nota">clique numa linha para filtrar as rubricas</span>
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-rec-origens" class="mini">
+            <thead>
+              <tr><th>Origem</th><th>Grupo</th><th class="num">Prev. atual.</th><th class="num">Arrecadado</th><th class="num">% prev.</th><th class="num">% total</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="table-head">
+          <h2>Por entidade</h2>
+          <span class="nota">Câmara sem receitas no módulo</span>
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-rec-entidades" class="mini">
+            <thead>
+              <tr><th>Entidade</th><th class="num">Arrecadado</th><th class="num">Prev. atual.</th><th class="num">Própria</th><th class="num">Transf.</th><th class="num">Depend.</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Por rubrica</h2>
+        <span class="nota">árvore PCASP · top 100 por arrecadado · não somar pais e filhos</span>
+        <button id="rec-limpar" class="btn ghost" type="button" hidden>Limpar filtro de origem</button>
+      </div>
+      <div class="table-wrap">
+        <table id="tabela-rec-rubricas" class="mini">
+          <thead>
+            <tr><th>Código</th><th>Especificação</th><th class="num">Prev. inicial</th><th class="num">Prev. atual.</th><th class="num">Arrecadado</th><th class="num">% prev.</th><th class="num">% total</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </section>
 
@@ -413,6 +485,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261021135325" defer></script>
+<script src="assets/app.js?v=20261022083221" defer></script>
 </body>
 </html>

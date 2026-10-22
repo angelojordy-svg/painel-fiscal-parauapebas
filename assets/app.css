@@ -77,6 +77,8 @@ tr:hover td{background:#f8fbfe}
 .legend .sw-a-pagar{background:#d97706}
 .legend .sw-a-liquidar{background:#2563eb}
 .legend .sw-alerta{background:#dc2626}
+.legend .sw-rec-propria{background:var(--brand)}
+.legend .sw-rec-transf{background:#9bc7df}
 .stack-bars{display:flex;flex-direction:column;gap:9px}
 .stack-row{display:grid;grid-template-columns:minmax(180px,300px) 1fr 120px;gap:10px;align-items:center;font-size:12.5px}
 .stack-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -108,6 +110,10 @@ tr:hover td{background:#f8fbfe}
 .mes .b1{background:var(--brand)}
 .mes .b2{background:#9bc7df}
 .mes .b3{background:#0f766e}
+.mes .col-rec{display:flex;flex-direction:column;justify-content:flex-end;height:110px;width:26px;margin:0 auto;border-radius:4px 4px 0 0;overflow:hidden;background:#eef2f7}
+.mes .seg-propria{display:block;width:100%;background:var(--brand)}
+.mes .seg-transf{display:block;width:100%;background:#9bc7df}
+#tabela-rec-origens tr.ativo td{background:#e3f2fb;font-weight:700}
 .funil{display:flex;flex-direction:column;gap:4px}
 .funil-etapa{display:grid;grid-template-columns:minmax(150px,220px) 1fr 140px;gap:10px;align-items:center;font-size:12.5px}
 .funil-label{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
