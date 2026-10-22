@@ -9,6 +9,13 @@
     const n = Number(v || 0);
     return brl.format(Math.abs(n) < 0.005 ? 0 : n);
   };
+  const moneyCompact = (v) => {
+    const n = Number(v || 0);
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `R$ ${(n / 1e9).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} bi`;
+    if (abs >= 1e6) return `R$ ${(n / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mi`;
+    return money(n);
+  };
   const percent = (v) => `${pct.format(Number(v || 0) * 100)}%`;
   const percent2 = (v) => `${pct2.format(Number(v || 0) * 100)}%`;
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -20,8 +27,12 @@
     return r.json();
   }
 
-  function card(label, value, note = "", cls = "") {
-    return `<div class="card ${cls}"><div class="label">${esc(label)}</div><div class="value">${value}</div>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+  function card(label, value, note = "", cls = "", title = "") {
+    return `<div class="card ${cls}"${title ? ` title="${esc(title)}"` : ""}><div class="label">${esc(label)}</div><div class="value">${value}</div>${note ? `<div class="note">${note}</div>` : ""}</div>`;
+  }
+
+  function cardMoney(label, value, note = "", cls = "") {
+    return card(label, moneyCompact(value), note, cls, money(value));
   }
 
   function bars(el, rows, valueKey, labelFn, format = money) {
@@ -215,13 +226,13 @@
   function renderGastosParado(v) {
     const acima = v.saldoEmp < -0.005;
     document.getElementById("gastos-parado").innerHTML = [
-      card(acima ? "Empenhado acima da dotação" : "Não empenhado",
-        money(acima ? -v.saldoEmp : v.saldoEmp),
+      cardMoney(acima ? "Empenhado acima da dotação" : "Não empenhado",
+        acima ? -v.saldoEmp : v.saldoEmp,
         acima ? "atenção: empenho maior que a dotação" : "sobrou da dotação",
         acima ? "alert" : ""),
-      card("Não liquidado", money(Math.max(v.aLiq, 0)), "empenhado sem entrega conferida", "alert"),
-      card("Não pago", money(Math.max(v.aPagar, 0)), "liquidado sem saída de caixa", "alert"),
-      card(v.supl >= 0 ? "Créditos adicionais" : "Reduções", money(Math.abs(v.supl)), "dotação atualizada − fixada"),
+      cardMoney("Não liquidado", Math.max(v.aLiq, 0), "empenhado sem entrega conferida", "alert"),
+      cardMoney("Não pago", Math.max(v.aPagar, 0), "liquidado sem saída de caixa", "alert"),
+      cardMoney(v.supl >= 0 ? "Créditos adicionais" : "Reduções", Math.abs(v.supl), "dotação atualizada − fixada"),
     ].join("");
   }
 
@@ -372,14 +383,14 @@
     }
 
     document.getElementById("gastos-kpis").innerHTML = [
-      card("Dotação fixada", money(dotFix)),
-      card("Dotação atualizada", money(dotAtu), `créditos/reduções ${money(supl)}`, "hero"),
-      card("Empenhado", money(emp), `${percent(exec)} da dotação`),
-      card("Liquidado", money(liq), `${percent(emp ? liq / emp : 0)} do empenhado`),
-      card("Pago", money(pago), `${percent(liq ? pago / liq : 0)} do liquidado`),
-      card("Saldo a empenhar", money(saldoEmp), "dotação − empenhado", saldoEmp < 0 ? "alert" : ""),
-      card("A liquidar", money(aLiq), "empenhado − liquidado", "alert"),
-      card("A pagar", money(aPagar), "liquidado − pago", "alert"),
+      cardMoney("Dotação fixada", dotFix),
+      cardMoney("Dotação atualizada", dotAtu, `créditos/reduções ${money(supl)}`, "hero"),
+      cardMoney("Empenhado", emp, `${percent(exec)} da dotação`),
+      cardMoney("Liquidado", liq, `${percent(emp ? liq / emp : 0)} do empenhado`),
+      cardMoney("Pago", pago, `${percent(liq ? pago / liq : 0)} do liquidado`),
+      cardMoney("Saldo a empenhar", saldoEmp, "dotação − empenhado", saldoEmp < 0 ? "alert" : ""),
+      cardMoney("A liquidar", aLiq, "empenhado − liquidado", "alert"),
+      cardMoney("A pagar", aPagar, "liquidado − pago", "alert"),
     ].join("");
 
     renderFunil(v);
@@ -487,7 +498,7 @@
       return `<li><span class="tipo">${esc(rotulos[tipo] || tipo)}</span><span>${esc(data)}</span><span class="valor ${cls}">${money(valor)}</span></li>`;
     }).join("") || `<li><span class="nota">Sem eventos detalhados.</span></li>`;
     document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(e.data)} · ${esc(e.unidade)} · ${esc(e.status)}</p>
-      <div class="grid">${card("Empenhado", money(e.valor), "", "hero")}${card("Liquidado", money(e.liq))}${card("Pago", money(e.pago))}${card("A pagar", money(e.a_pagar), "", "alert")}</div>
+      <div class="grid">${cardMoney("Empenhado", e.valor, "", "hero")}${cardMoney("Liquidado", e.liq)}${cardMoney("Pago", e.pago)}${cardMoney("A pagar", e.a_pagar, "", "alert")}</div>
       <div class="two">
         <div><h3>Classificação</h3><table class="mini"><tbody>
           <tr><th>Natureza</th><td>${esc(e.nat)} · ${esc(e.nat_nome)}</td></tr>
@@ -567,11 +578,11 @@
       const meta = dados.meta;
       document.getElementById("forn-kpis").innerHTML = [
         card("Fornecedores com CNPJ", String(meta.total_pj), `${meta.total_fornecedores} linhas (PF agregada)`, "hero"),
-        card("Empenhado a fornecedores", money(meta.total_emp), `de ${money(meta.total_geral)} no total`),
-        card("Pago a fornecedores", money(meta.total_pago), `${percent(meta.total_emp ? meta.total_pago / meta.total_emp : 0)} do empenhado`),
+        cardMoney("Empenhado a fornecedores", meta.total_emp, `de ${money(meta.total_geral)} no total`),
+        cardMoney("Pago a fornecedores", meta.total_pago, `${percent(meta.total_emp ? meta.total_pago / meta.total_emp : 0)} do empenhado`),
         card("Top 10", percent(meta.top10_share), "concentração do empenhado", meta.top10_share > 0.6 ? "alert" : ""),
         card("HHI", Number(meta.hhi || 0).toFixed(0), "0–10.000; maior = concentração"),
-        card("Excluídos", money(meta.excluidos), "folha, encargos e entes públicos"),
+        cardMoney("Excluídos", meta.excluidos, "folha, encargos e entes públicos"),
       ].join("");
       tbody.innerHTML = page.map((f, i) => `<tr class="clickable" data-forn="${f.doc || "pf:" + i}">
         <td class="forn-nome" title="${esc(f.nome)}">${esc(f.nome)}</td>
@@ -623,7 +634,7 @@
       { label: "Pago", num: true, money: true }, { label: "Detalhe", html: true },
     ]);
     document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(f.primeira)} a ${esc(f.ultima)} · ${f.qtd} empenho(s) · ${esc((f.slugs || []).join(", "))}</p>
-      <div class="grid">${card("Empenhado", money(f.emp), "", "hero")}${card("Liquidado", money(f.liq))}${card("Pago", money(f.pago))}${card("A pagar", money(f.a_pagar), "", "alert")}</div>
+      <div class="grid">${cardMoney("Empenhado", f.emp, "", "hero")}${cardMoney("Liquidado", f.liq)}${cardMoney("Pago", f.pago)}${cardMoney("A pagar", f.a_pagar, "", "alert")}</div>
       ${ent}${orgao}${nat}${fun}${top}`;
     document.getElementById("modal").hidden = false;
     document.body.style.overflow = "hidden";
@@ -707,8 +718,8 @@
       const m = dados.meta || {};
       document.getElementById("lic-kpis").innerHTML = [
         card("Licitações", String(m.total || 0), `até ${m.ate || "—"}`, "hero"),
-        card("Valor estimado", money(m.valor_estimado), `${m.modalidades || 0} modalidades`),
-        card("Valor homologado", money(m.valor_homologado), "no acervo"),
+        cardMoney("Valor estimado", m.valor_estimado, `${m.modalidades || 0} modalidades`),
+        cardMoney("Valor homologado", m.valor_homologado, "no acervo"),
         card("Radar", String(m.radar || 0), "sessões futuras · PNCP + portal"),
       ].join("");
       const radar = dados.radar || [];
@@ -739,7 +750,7 @@
     document.getElementById("modal-title").textContent = `Licitação ${l.numero || l.processo || l.id}`;
     const links = [l.link, l.link_processo].map(linkSeguro).filter(Boolean);
     document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(l.publicacao)} · ${esc(l.modalidade)} · ${esc(l.situacao)}</p>
-      <div class="grid">${card("Estimado", money(l.valor_estimado), "", "hero")}${card("Homologado", money(l.valor_homologado))}${card("Abertura", esc(l.abertura || "—"), l.dias_abertura == null ? "" : `${l.dias_abertura} dia(s)`)}${card("SRP", l.srp ? "Sim" : "Não")}</div>
+      <div class="grid">${cardMoney("Estimado", l.valor_estimado, "", "hero")}${cardMoney("Homologado", l.valor_homologado)}${card("Abertura", esc(l.abertura || "—"), l.dias_abertura == null ? "" : `${l.dias_abertura} dia(s)`)}${card("SRP", l.srp ? "Sim" : "Não")}</div>
       <p><b>Objeto:</b> ${esc(l.objeto)}</p>
       <table class="mini"><tbody>
         <tr><th>Processo</th><td>${esc(l.processo || "—")}</td></tr>
@@ -797,7 +808,7 @@
       document.getElementById("con-kpis").innerHTML = [
         card("Contratos", String(m.total || 0), `vigência ${state.meta.ano}`, "hero"),
         card("Ativos", String(m.ativos || 0), "vigentes, a vencer ou futuros"),
-        card("Valor vigente", money(m.valor_vigente), "valor acumulado/global"),
+        cardMoney("Valor vigente", m.valor_vigente, "valor acumulado/global"),
         card("Vencendo 90 dias", String(m.vencendo_90 || 0), "pedem ação", "alert"),
         card("Sem disputa", m.sem_disputa_share == null ? "—" : percent(m.sem_disputa_share), `${m.sem_disputa || 0} de ${m.sem_disputa_base || 0} com compra vinculada`),
       ].join("");
@@ -827,7 +838,7 @@
     document.getElementById("modal-title").textContent = `Contrato ${c.numero} · ${c.fornecedor}`;
     const url = linkSeguro(c.url);
     document.getElementById("modal-body").innerHTML = `<p class="nota">${esc(c.tipo)} · ${esc(c.status)} · ${esc(c.inicio)} a ${esc(c.fim)}</p>
-      <div class="grid">${card("Valor", money(c.valor), "", "hero")}${card("Dias para vencer", String(c.dias_vencer))}${card("Aditivos", String(c.retificacoes))}${card("Sem disputa", c.sem_disputa == null ? "—" : (c.sem_disputa ? "Sim" : "Não"))}</div>
+      <div class="grid">${cardMoney("Valor", c.valor, "", "hero")}${card("Dias para vencer", String(c.dias_vencer))}${card("Aditivos", String(c.retificacoes))}${card("Sem disputa", c.sem_disputa == null ? "—" : (c.sem_disputa ? "Sim" : "Não"))}</div>
       <p><b>Objeto:</b> ${esc(c.objeto)}</p>
       <table class="mini"><tbody>
         <tr><th>Processo</th><td>${esc(c.processo || "—")}</td></tr>
@@ -954,11 +965,11 @@
     const propria = Number(m.propria || 0);
     const transf = Number(m.transferencias || 0);
     document.getElementById("rec-kpis").innerHTML = [
-      card("Arrecadado", money(total), "jan-out/2026 · out parcial", "hero"),
-      card("Previsto inicial", money(m.prev_inicial), "LOA 2026"),
-      card("Previsto atualizado", money(prevAtu), prevAtu ? `${percent(total / prevAtu)} arrecadado` : ""),
-      card("Receita própria", money(propria), total ? `${percent(propria / total)} do arrecadado` : ""),
-      card("Transferências", money(transf), total ? `${percent(transf / total)} do arrecadado` : ""),
+      cardMoney("Arrecadado", total, `até ${m.ate || "—"} · out parcial`, "hero"),
+      cardMoney("Previsto inicial", m.prev_inicial, "LOA 2026"),
+      cardMoney("Previsto atualizado", prevAtu, prevAtu ? `${percent(total / prevAtu)} arrecadado` : ""),
+      cardMoney("Receita própria", propria, total ? `${percent(propria / total)} do arrecadado` : ""),
+      cardMoney("Transferências", transf, total ? `${percent(transf / total)} do arrecadado` : ""),
       card("Dependência de transferências", percent2(m.dependencia), "transferências ÷ arrecadado"),
     ].join("");
     renderRecMensal(document.getElementById("rec-mensal"), rec.mensal || []);
@@ -1111,7 +1122,7 @@
     </tr>`).join("") || `<tr><td colspan="5" class="nota">Sem empenhos de locação.</td></tr>`;
     const alertas = (g.alertas || []).map((a) => `<li><b>${esc(ALUG_ALERTA_LABEL[a.tipo] || a.tipo)}</b> · ${esc(a.detalhe || "")}</li>`).join("");
     document.getElementById("modal-body").innerHTML = `<p class="nota">${g.doc ? `CNPJ ${esc(fmtDoc(g.doc))}` : "Pessoa física (sem CPF)"} · ${g.contratos_locador} contrato(s) · ${g.rateio === "locador" ? "valores do locador, sem rateio por contrato" : "valores do contrato"}</p>
-      <div class="grid">${card("Valor contratado", money(g.valor_contratado), "", "hero")}${card("Empenhado", money(g.emp))}${card("Pago", money(g.pago))}${card("A pagar", money(g.a_pagar), "", "alert")}</div>
+      <div class="grid">${cardMoney("Valor contratado", g.valor_contratado, "", "hero")}${cardMoney("Empenhado", g.emp)}${cardMoney("Pago", g.pago)}${cardMoney("A pagar", g.a_pagar, "", "alert")}</div>
       ${alertas ? `<h3>Alertas</h3><ul>${alertas}</ul>` : ""}
       <h3>Contratos</h3><div class="table-wrap"><table class="mini"><thead><tr><th>Contrato</th><th>Vigência</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${contratos}</tbody></table></div>
       <h3>Maiores empenhos</h3><div class="table-wrap"><table class="mini"><thead><tr><th>Data</th><th>Empenho</th><th>Entidade</th><th class="num">Empenhado</th><th class="num">Pago</th></tr></thead><tbody>${emps}</tbody></table></div>`;
@@ -1139,11 +1150,11 @@
     document.getElementById("alug-kpis").innerHTML = [
       card("Contratos de locação", String(m.contratos || 0), `vigência ${m.ano}`, "hero"),
       card("Locadores com contrato", String(m.locadores || 0), `${m.sem_contrato || 0} sem contrato 2026`),
-      card("Valor contratado", money(m.valor_contratado), "soma dos contratos de imóvel"),
-      card("Empenhado (contrato 2026)", money(m.emp_contratos), m.valor_contratado ? `${percent(m.emp_contratos / m.valor_contratado)} do contratado` : ""),
-      card("Pago (contrato 2026)", money(m.pago_contratos), m.emp_contratos ? `${percent(m.pago_contratos / m.emp_contratos)} do empenhado` : ""),
-      card("Pago total", money(m.pago), "inclui locadores sem contrato 2026"),
-      card("A pagar total", money(m.a_pagar), "liquidado − pago", "alert"),
+      cardMoney("Valor contratado", m.valor_contratado, "soma dos contratos de imóvel"),
+      cardMoney("Empenhado (contrato 2026)", m.emp_contratos, m.valor_contratado ? `${percent(m.emp_contratos / m.valor_contratado)} do contratado` : ""),
+      cardMoney("Pago (contrato 2026)", m.pago_contratos, m.emp_contratos ? `${percent(m.pago_contratos / m.emp_contratos)} do empenhado` : ""),
+      cardMoney("Pago total", m.pago, "inclui locadores sem contrato 2026"),
+      cardMoney("A pagar total", m.a_pagar, "liquidado − pago", "alert"),
       card("Sem pagamento", String(m.sem_pagamento || 0), "contrato(s) sem empenho em 2026", "alert"),
       card("Fora da vigência", String(m.fora_vigencia || 0), "empenho(s) fora do contrato", "alert"),
     ].join("");
@@ -1169,13 +1180,13 @@
     const p = state.panorama;
     const t = p.totais;
     document.getElementById("panorama-kpis").innerHTML = [
-      card("Dotação atualizada", money(t.dot_atu), `fixada ${money(t.dot_fix)}`, "hero"),
-      card("Empenhado até out", money(t.emp_ytd), `${percent(t.exec)} da dotação`),
-      card("Liquidado até out", money(t.liq_ytd), `movimento out ${money(t.liq_mes)}`),
-      card("Pago até out", money(t.pago_ytd), `movimento out ${money(t.pago_mes)}`),
-      card("Saldo a empenhar", money(t.saldo), "dotação − empenhado"),
-      card("Projeção fechada Jan-Ago", money(t.proj_ago), `saldo ${money(t.saldo_ago)}`, "alert"),
-      card("Projeção provisória Jan-Set", money(t.proj_set), `saldo ${money(t.saldo_set)}`, "alert"),
+      cardMoney("Dotação atualizada", t.dot_atu, `fixada ${money(t.dot_fix)}`, "hero"),
+      cardMoney("Empenhado até out", t.emp_ytd, `${percent(t.exec)} da dotação`),
+      cardMoney("Liquidado até out", t.liq_ytd, `movimento out ${money(t.liq_mes)}`),
+      cardMoney("Pago até out", t.pago_ytd, `movimento out ${money(t.pago_mes)}`),
+      cardMoney("Saldo a empenhar", t.saldo, "dotação − empenhado"),
+      cardMoney("Projeção fechada Jan-Ago", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
+      cardMoney("Projeção provisória Jan-Set", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
     ].join("");
 
     document.getElementById("fechamento").innerHTML = `<table><thead><tr><th>Bimestre</th><th>Status</th><th>Referência</th></tr></thead><tbody>${p.fechamento.bimestres.map((b) => `<tr><td>${esc(b.nome)}</td><td><span class="pill ${b.status === "fechado" ? "ok" : "warn"}">${esc(b.status)}</span></td><td>${esc(b.fechado_em || b.base_ate || b.previsao || "")}</td></tr>`).join("")}</tbody></table>`;
@@ -1229,13 +1240,13 @@
     if (!u) return;
     const t = u.totais;
     document.getElementById("despesas-kpis").innerHTML = [
-      card("Dotação atualizada", money(t.dot_atu), `fixada ${money(t.dot_fix)}`, "hero"),
-      card("Empenhado", money(t.emp_ytd), `${percent(t.exec)} da dotação`),
-      card("Liquidado", money(t.liq_ytd), `movimento out ${money(t.liq_mes)}`),
-      card("Pago", money(t.pago_ytd), `movimento out ${money(t.pago_mes)}`),
-      card("Saldo a empenhar", money(t.saldo), "dotação − empenhado"),
-      card("Projeção fechada", money(t.proj_ago), `saldo ${money(t.saldo_ago)}`, "alert"),
-      card("Projeção provisória", money(t.proj_set), `saldo ${money(t.saldo_set)}`, "alert"),
+      cardMoney("Dotação atualizada", t.dot_atu, `fixada ${money(t.dot_fix)}`, "hero"),
+      cardMoney("Empenhado", t.emp_ytd, `${percent(t.exec)} da dotação`),
+      cardMoney("Liquidado", t.liq_ytd, `movimento out ${money(t.liq_mes)}`),
+      cardMoney("Pago", t.pago_ytd, `movimento out ${money(t.pago_mes)}`),
+      cardMoney("Saldo a empenhar", t.saldo, "dotação − empenhado"),
+      cardMoney("Projeção fechada", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
+      cardMoney("Projeção provisória", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
     ].join("");
     document.getElementById("despesas-nota").textContent = `${u.nome} · ${u.naturezas.length} naturezas · códigos ${u.codigos.join(", ")}`;
 
@@ -1276,9 +1287,9 @@
     const c = state.conferencia.conferencia;
     const ts = c.totais["09/2026"], to = c.totais["10/2026"];
     document.getElementById("conferencia-kpis").innerHTML = [
-      card("Set/2026 — diferença", money(ts.diff), `${ts.falhas} unidade(s) divergente(s)`, Math.abs(ts.diff) <= 0.01 ? "ok" : "alert"),
-      card("Out/2026 — diferença", money(to.diff), `${to.falhas} unidade(s) divergente(s)`, Math.abs(to.diff) <= 0.01 ? "ok" : "alert"),
-      card("Liquidações", money(ts.portal), `base ${c.raw || "—"} · cortes ${c.cortes?.["09/2026"] || "—"} e ${c.cortes?.["10/2026"] || "—"}`),
+      cardMoney("Set/2026 — diferença", ts.diff, `${ts.falhas} unidade(s) divergente(s)`, Math.abs(ts.diff) <= 0.01 ? "ok" : "alert"),
+      cardMoney("Out/2026 — diferença", to.diff, `${to.falhas} unidade(s) divergente(s)`, Math.abs(to.diff) <= 0.01 ? "ok" : "alert"),
+      cardMoney("Liquidações", ts.portal, `base ${c.raw || "—"} · cortes ${c.cortes?.["09/2026"] || "—"} e ${c.cortes?.["10/2026"] || "—"}`),
       card("Portais", "2 competências", "set e out/2026; out é parcial"),
     ].join("");
     const rows = (c.linhas || []).slice().sort((a, b) => (a.entidade || "").localeCompare(b.entidade || "") || a.unid - b.unid || a.competencia.localeCompare(b.competencia));
