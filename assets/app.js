@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [] };
+  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [] };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const pct2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -976,6 +976,195 @@
     renderReceitas();
   }
 
+  const ALUG_ALERTA_LABEL = {
+    sem_pagamento: "sem pagamento",
+    fora_vigencia: "fora da vigência",
+    sem_contrato: "sem contrato 2026",
+  };
+
+  function alugAlertaBadges(g) {
+    const tipos = [...new Set((g.alertas || []).map((a) => a.tipo))];
+    return tipos.map((t) => `<span class="pill ${t === "fora_vigencia" ? "bad" : "warn"}">${esc(ALUG_ALERTA_LABEL[t] || t)}</span>`).join(" ") || `<span class="pill ok">ok</span>`;
+  }
+
+  function alugStatusLocador(g) {
+    const st = (g.contratos || []).map((c) => c.status);
+    if (st.includes("a_vencer")) return "a_vencer";
+    if (st.includes("vigente")) return "vigente";
+    if (st.length && st.every((s) => s === "encerrado")) return "encerrado";
+    return "";
+  }
+
+  function alugTexto(x) {
+    const contratos = (x.contratos || []).map((c) => `${c.numero} ${c.objeto}`).join(" ");
+    const emps = (x.empenhos_top || []).map((e) => e.historico).join(" ");
+    return norm(`${x.nome || ""} ${x.locador || ""} ${x.numero || ""} ${x.objeto || ""} ${contratos} ${emps}`);
+  }
+
+  function filtrarAlugLocadores(rec) {
+    const q = norm(document.getElementById("alug-busca")?.value).trim();
+    const sit = document.getElementById("alug-situacao")?.value || "";
+    return (rec.locadores || []).filter((g) => {
+      if (q && !alugTexto(g).includes(q)) return false;
+      if (sit === "sem_pagamento" && Number(g.qtd_empenhos || 0) > 0) return false;
+      if (sit && sit !== "sem_pagamento" && alugStatusLocador(g) !== sit) return false;
+      return true;
+    });
+  }
+
+  function filtrarAlugContratos(rec, semPagamento) {
+    const q = norm(document.getElementById("alug-busca")?.value).trim();
+    const sit = document.getElementById("alug-situacao")?.value || "";
+    return (rec.contratos || []).filter((c) => {
+      if (q && !alugTexto(c).includes(q)) return false;
+      if (sit === "sem_pagamento" && !semPagamento.has(c.locador_chave)) return false;
+      if (sit && sit !== "sem_pagamento" && c.status !== sit) return false;
+      return true;
+    });
+  }
+
+  function renderAlugAlertas(rec) {
+    const el = document.getElementById("alug-alertas");
+    if (!el) return;
+    const porTipo = { sem_pagamento: [], fora_vigencia: [], sem_contrato: [] };
+    for (const a of rec.alertas || []) (porTipo[a.tipo] ||= []).push(a);
+    const bloco = (tipo, titulo, cls) => {
+      const itens = porTipo[tipo] || [];
+      if (!itens.length) return `<div class="alug-alerta"><span class="pill ok">${esc(titulo)}</span><span class="nota">nenhum</span></div>`;
+      const lis = itens.slice(0, 6).map((a) => {
+        const qtd = a.qtd ? ` · ${a.qtd} empenho(s)` : "";
+        const det = tipo === "sem_contrato" ? "" : (a.detalhe ? ` · ${esc(a.detalhe)}` : "");
+        return `<li><b>${esc(a.locador || "")}</b>${qtd}${det}</li>`;
+      }).join("");
+      return `<div class="alug-alerta"><div class="alug-alerta-head"><span class="pill ${cls}">${esc(titulo)} (${itens.length})</span></div><ul>${lis}</ul>${itens.length > 6 ? `<p class="nota">+ ${itens.length - 6} outros.</p>` : ""}</div>`;
+    };
+    el.innerHTML = bloco("sem_pagamento", "Sem pagamento", "warn")
+      + bloco("fora_vigencia", "Fora da vigência", "bad")
+      + bloco("sem_contrato", "Sem contrato 2026", "warn");
+  }
+
+  function renderAlugLocadores(rows) {
+    const tbody = document.querySelector("#tabela-alug-locadores tbody");
+    if (!tbody) return;
+    tbody.innerHTML = rows.map((g) => `<tr class="clickable" data-alug="${esc(g.chave)}">
+      <td class="forn-nome">${esc(g.nome)}</td>
+      <td>${g.doc ? "PJ" : "PF"}</td>
+      <td class="num">${g.contratos_locador}</td>
+      <td class="num">${money(g.valor_contratado)}</td>
+      <td class="num">${money(g.emp)}</td>
+      <td class="num">${money(g.pago)}</td>
+      <td class="num">${money(g.a_pagar)}</td>
+      <td>${esc(g.ultimo_pagamento || "—")}</td>
+      <td>${alugAlertaBadges(g)}</td>
+    </tr>`).join("") || `<tr><td colspan="9" class="nota">Nenhum locador com esse filtro.</td></tr>`;
+    tbody.onclick = (ev) => {
+      const tr = ev.target.closest("tr[data-alug]");
+      if (!tr) return;
+      const g = rows.find((x) => x.chave === tr.dataset.alug);
+      if (g) abrirAluguel(g);
+    };
+  }
+
+  function renderAlugContratos(rows) {
+    const tbody = document.querySelector("#tabela-alug-contratos tbody");
+    if (!tbody) return;
+    tbody.innerHTML = rows.map((c) => {
+      const star = c.rateio === "locador" ? " *" : "";
+      return `<tr>
+        <td class="cod">${esc(c.numero)}</td>
+        <td class="forn-nome">${esc(c.locador)}</td>
+        <td style="white-space:normal;min-width:220px">${esc(c.objeto)}</td>
+        <td>${esc(c.inicio)}</td><td>${esc(c.fim)}</td>
+        <td class="num">${money(c.valor)}</td>
+        <td>${contratoStatus(c)}</td>
+        <td class="num" title="${c.rateio === "locador" ? "Valor do locador (sem rateio por contrato)" : ""}">${money(c.pago)}${star}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="8" class="nota">Nenhum contrato com esse filtro.</td></tr>`;
+  }
+
+  function renderAlugSemContrato(rows) {
+    const tbody = document.querySelector("#tabela-alug-sem-contrato tbody");
+    if (!tbody) return;
+    const page = rows.slice(0, state.alugLimite);
+    tbody.innerHTML = page.map((g) => `<tr>
+      <td class="forn-nome">${esc(g.nome)}</td>
+      <td>${g.doc ? "PJ" : "PF"}</td>
+      <td class="num">${money(g.emp)}</td>
+      <td class="num">${money(g.pago)}</td>
+      <td class="num">${g.qtd_empenhos}</td>
+      <td>${esc(g.primeiro || "—")}</td>
+      <td>${esc(g.ultimo || "—")}</td>
+    </tr>`).join("") || `<tr><td colspan="7" class="nota">Nenhum locador sem contrato com esse filtro.</td></tr>`;
+    const mais = document.getElementById("alug-sem-mais");
+    if (mais) mais.hidden = page.length >= rows.length;
+  }
+
+  function abrirAluguel(g) {
+    document.getElementById("modal-title").textContent = `Aluguéis · ${g.nome}`;
+    const contratos = (g.contratos || []).map((c) => `<tr>
+      <td>${esc(c.numero)}</td><td>${esc(c.inicio)} a ${esc(c.fim)}</td>
+      <td class="num">${money(c.valor)}</td><td>${contratoStatus(c)}</td>
+    </tr>`).join("") || `<tr><td colspan="4" class="nota">Sem contrato com vigência em 2026.</td></tr>`;
+    const emps = (g.empenhos_top || []).map((e) => `<tr>
+      <td>${esc(e.data)}</td><td class="cod">${esc(e.empenho)}</td><td>${esc(e.entidade)}</td>
+      <td class="num">${money(e.valor)}</td><td class="num">${money(e.pago)}</td>
+    </tr>`).join("") || `<tr><td colspan="5" class="nota">Sem empenhos de locação.</td></tr>`;
+    const alertas = (g.alertas || []).map((a) => `<li><b>${esc(ALUG_ALERTA_LABEL[a.tipo] || a.tipo)}</b> · ${esc(a.detalhe || "")}</li>`).join("");
+    document.getElementById("modal-body").innerHTML = `<p class="nota">${g.doc ? `CNPJ ${esc(fmtDoc(g.doc))}` : "Pessoa física (sem CPF)"} · ${g.contratos_locador} contrato(s) · ${g.rateio === "locador" ? "valores do locador, sem rateio por contrato" : "valores do contrato"}</p>
+      <div class="grid">${card("Valor contratado", money(g.valor_contratado), "", "hero")}${card("Empenhado", money(g.emp))}${card("Pago", money(g.pago))}${card("A pagar", money(g.a_pagar), "", "alert")}</div>
+      ${alertas ? `<h3>Alertas</h3><ul>${alertas}</ul>` : ""}
+      <h3>Contratos</h3><div class="table-wrap"><table class="mini"><thead><tr><th>Contrato</th><th>Vigência</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${contratos}</tbody></table></div>
+      <h3>Maiores empenhos</h3><div class="table-wrap"><table class="mini"><thead><tr><th>Data</th><th>Empenho</th><th>Entidade</th><th class="num">Empenhado</th><th class="num">Pago</th></tr></thead><tbody>${emps}</tbody></table></div>`;
+    document.getElementById("modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function exportarAlugueisCSV(rows) {
+    baixarCSV(`painel_fiscal_alugueis_${state.meta.ano}.csv`,
+      ["locador", "cnpj", "tipo", "contratos", "valor_contratado", "empenhado", "liquidado", "pago", "a_pagar", "ultimo_pagamento", "alertas"],
+      rows.map((g) => [g.nome, g.doc, g.doc ? "PJ" : "PF", g.contratos_locador, g.valor_contratado, g.emp, g.liq, g.pago, g.a_pagar, g.ultimo_pagamento || "", (g.alertas || []).map((a) => a.tipo).join("; ")]));
+  }
+
+  function renderAlugueis() {
+    const rec = state.alugueis;
+    if (!rec) return;
+    const m = rec.meta || {};
+    const semPagamento = new Set((rec.locadores || []).filter((g) => Number(g.qtd_empenhos || 0) === 0).map((g) => g.chave));
+    const locadores = filtrarAlugLocadores(rec);
+    const contratos = filtrarAlugContratos(rec, semPagamento);
+    const q = norm(document.getElementById("alug-busca")?.value).trim();
+    const semContrato = (rec.sem_contrato || []).filter((g) => !q || alugTexto(g).includes(q));
+    state.alugFiltrados = locadores;
+
+    document.getElementById("alug-kpis").innerHTML = [
+      card("Contratos de locação", String(m.contratos || 0), `vigência ${m.ano}`, "hero"),
+      card("Locadores com contrato", String(m.locadores || 0), `${m.sem_contrato || 0} sem contrato 2026`),
+      card("Valor contratado", money(m.valor_contratado), "soma dos contratos de imóvel"),
+      card("Empenhado (contrato 2026)", money(m.emp_contratos), m.valor_contratado ? `${percent(m.emp_contratos / m.valor_contratado)} do contratado` : ""),
+      card("Pago (contrato 2026)", money(m.pago_contratos), m.emp_contratos ? `${percent(m.pago_contratos / m.emp_contratos)} do empenhado` : ""),
+      card("Pago total", money(m.pago), "inclui locadores sem contrato 2026"),
+      card("A pagar total", money(m.a_pagar), "liquidado − pago", "alert"),
+      card("Sem pagamento", String(m.sem_pagamento || 0), "contrato(s) sem empenho em 2026", "alert"),
+      card("Fora da vigência", String(m.fora_vigencia || 0), "empenho(s) fora do contrato", "alert"),
+    ].join("");
+    document.getElementById("alug-nota").textContent = `${locadores.length} locador(es) · ${contratos.length} contrato(s) · ${semContrato.length} sem contrato · até ${m.ate || "—"}`;
+    renderAlugAlertas(rec);
+    renderAlugLocadores(locadores);
+    renderAlugContratos(contratos);
+    renderAlugSemContrato(semContrato);
+  }
+
+  function initAlugueisFiltros() {
+    const busca = document.getElementById("alug-busca");
+    if (!busca) return;
+    const atualizar = () => { state.alugLimite = 20; renderAlugueis(); };
+    busca.oninput = atualizar;
+    document.getElementById("alug-situacao").onchange = atualizar;
+    document.getElementById("alug-carregar").onclick = () => { state.alugLimite += 20; renderAlugueis(); };
+    document.getElementById("alug-exportar").onclick = () => exportarAlugueisCSV(state.alugFiltrados || []);
+    renderAlugueis();
+  }
+
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
@@ -1165,15 +1354,17 @@
     if (id === "fornecedores") renderFornecedores();
     if (id === "licitacoes") renderLicitacoes();
     if (id === "contratos") renderContratos();
+    if (id === "alugueis") renderAlugueis();
   }
 
   async function init() {
     try {
       state.meta = await json("meta");
-      const [panorama, despesas, gastos, receitas, conferencia, sobre] = await Promise.all([
-        json("panorama"), json("despesas"), json("gastos"), json("receitas"), json("conferencia"), json("sobre"),
+      const [panorama, despesas, gastos, receitas, alugueis, conferencia, sobre] = await Promise.all([
+        json("panorama"), json("despesas"), json("gastos"), json("receitas"),
+        json("alugueis"), json("conferencia"), json("sobre"),
       ]);
-      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, conferencia, sobre });
+      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, alugueis, conferencia, sobre });
       renderPanorama();
       renderDespesas();
       renderGastosFiltros();
@@ -1183,6 +1374,7 @@
       initFornecedoresFiltros();
       initLicitacoesFiltros();
       initContratosFiltros();
+      initAlugueisFiltros();
       const params = new URLSearchParams(location.search);
       const unidParam = Number(params.get("unid"));
       if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {

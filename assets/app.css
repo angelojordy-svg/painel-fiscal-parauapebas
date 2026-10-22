@@ -169,6 +169,11 @@ tr:hover td{background:#f8fbfe}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}
 .pill.bad{background:var(--bad-bg);color:var(--bad)}
 .pill.warn{background:var(--warn-bg);color:var(--warn)}
+.alug-alertas{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.alug-alerta{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#f9fbfd}
+.alug-alerta ul{margin:8px 0 0 16px;font-size:12px}
+.alug-alerta li{margin:3px 0}
+.alug-alerta-head{margin-bottom:4px}
 .clickable{cursor:pointer}
 .clickable:hover td{background:#eef7fd!important}
 .hint{font-size:10px;color:var(--muted);font-weight:600}
