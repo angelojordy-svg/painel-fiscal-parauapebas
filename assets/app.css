@@ -21,6 +21,7 @@ h1 span{opacity:.9}
 .tabs a{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:13px;font-weight:700;padding:8px 12px;border-radius:9px 9px 0 0;border:1px solid transparent;border-bottom:0}
 .tabs a:hover{color:var(--ink);background:#eef3f8}
 .tabs a.active{color:var(--brand);background:var(--surface);border-color:var(--line)}
+.tabs a.externo{border:1px dashed var(--line);border-bottom:0;color:var(--brand)}
 main{padding:18px 24px 40px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:0 0 16px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);min-width:0}
