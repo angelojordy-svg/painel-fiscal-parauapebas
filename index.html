@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261022105044">
+<link rel="stylesheet" href="assets/app.css?v=20261023131653">
 </head>
 <body>
 <header>
@@ -12,11 +12,14 @@
     <div class="eyebrow">Painel Fiscal Parauapebas</div>
     <h1>Painel Fiscal <span>Parauapebas</span></h1>
     <div class="sub">Parauapebas/PA · Prefeitura, SAAEP e Câmara · demonstrativo orçamentário, projeções e conferência com o Portal da Transparência.</div>
-    <div class="badges">
+    <div class="badges" id="badges">
       <span class="badge ok">Fechado: Jan-Ago</span>
       <span class="badge warn">Provisório: Jan-Set</span>
       <span class="badge muted">Out/2026 parcial</span>
     </div>
+    <label class="ano-select">Exercício
+      <select id="ano-select"></select>
+    </label>
   </div>
 </header>
 
@@ -41,6 +44,7 @@
 
 <main class="wrap">
   <div id="erro" class="erro" hidden></div>
+  <div id="aviso-ano" class="aviso" hidden></div>
 
   <section id="panorama" class="tab">
     <div id="panorama-kpis" class="grid"></div>
@@ -58,6 +62,14 @@
     <section class="panel">
       <h2>Por entidade</h2>
       <div id="entidades"></div>
+    </section>
+
+    <section class="panel">
+      <div class="table-head">
+        <h2>Série histórica</h2>
+        <span class="nota">Receita arrecadada × despesa empenhada por exercício</span>
+      </div>
+      <div id="serie-historica"></div>
     </section>
 
     <section class="panel">
@@ -286,6 +298,14 @@
   </section>
 
   <section id="empenhos" class="tab" hidden>
+    <div id="emp-aviso" class="aviso" hidden></div>
+    <section id="emp-resumo" class="panel" hidden>
+      <div class="table-head">
+        <h2>Empenhos por entidade e fornecedor</h2>
+        <span class="nota">Agregado do exercício; a lista detalhada está disponível apenas no ano corrente.</span>
+      </div>
+      <div id="emp-resumo-conteudo"></div>
+    </section>
     <div class="filtros panel">
       <label>Entidade
         <select id="emp-entidade"></select>
@@ -326,6 +346,7 @@
   </section>
 
   <section id="fornecedores" class="tab" hidden>
+    <div id="forn-aviso" class="aviso" hidden></div>
     <div class="filtros panel">
       <label>Buscar
         <input id="forn-busca" type="search" placeholder="fornecedor ou CNPJ">
@@ -367,6 +388,7 @@
   </section>
 
   <section id="licitacoes" class="tab" hidden>
+    <div id="lic-aviso" class="aviso" hidden></div>
     <div class="filtros panel">
       <label>Modalidade
         <select id="lic-modalidade"><option value="">Todas</option></select>
@@ -409,6 +431,7 @@
   </section>
 
   <section id="contratos" class="tab" hidden>
+    <div id="con-aviso" class="aviso" hidden></div>
     <div class="filtros panel">
       <label>Situação
         <select id="con-situacao">
@@ -455,6 +478,7 @@
   </section>
 
   <section id="alugueis" class="tab" hidden>
+    <div id="alug-aviso" class="aviso" hidden></div>
     <div class="filtros panel">
       <label>Buscar
         <input id="alug-busca" type="search" placeholder="locador, contrato ou objeto">
@@ -627,12 +651,12 @@
     <div class="panel">
       <div class="table-head">
         <h2>Conferência: portal × liquidações</h2>
-        <span class="nota">Liquidações com Registro = Anulado deduzido; set/2026 e out/2026 são provisórios.</span>
+        <span id="conferencia-nota" class="nota">Liquidações com Registro = Anulado deduzido.</span>
       </div>
       <div class="table-wrap">
         <table id="tabela-conferencia">
           <thead>
-            <tr><th>Entidade</th><th>Unidade</th><th>Competência</th><th class="num">Portal</th><th class="num">Liquidações</th><th class="num">Diferença</th><th>Status</th></tr>
+            <tr><th>Entidade</th><th>Unidade</th><th>Competência</th><th class="num">Empenhado</th><th class="num">Dif. empenhado</th><th class="num">Portal</th><th class="num">Liquidações</th><th class="num">Diferença</th><th>Status</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -659,6 +683,6 @@
 <footer class="wrap">
   <span id="rodape">Carregando…</span>
 </footer>
-<script src="assets/app.js?v=20261022105044" defer></script>
+<script src="assets/app.js?v=20261023131653" defer></script>
 </body>
 </html>

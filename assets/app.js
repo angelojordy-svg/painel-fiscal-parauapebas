@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [], cfem: null, cfemFiltrados: [] };
+  const state = { ano: null, serie: null, meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empResumo: null, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [], cfem: null, cfemFiltrados: [], anoReq: 0 };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const pct2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,11 +19,24 @@
   const percent = (v) => `${pct.format(Number(v || 0) * 100)}%`;
   const percent2 = (v) => `${pct2.format(Number(v || 0) * 100)}%`;
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const mesNome = (m) => MESES[(Number(m) || 1) - 1] || "";
+  const rotuloAte = () => {
+    const m = state.meta?.mes_parcial || 12;
+    return state.meta?.fechado ? "dez" : mesNome(m);
+  };
+  const anoAtual = () => Number(state.ano || state.meta?.ano || 0);
 
   async function json(name) {
     const v = state.meta?.versao ? `?v=${encodeURIComponent(state.meta.versao)}` : "";
-    const r = await fetch(`dados/${name}.json${v}`, { cache: "no-store" });
+    const r = await fetch(`dados/${state.ano}/${name}.json${v}`, { cache: "no-store" });
     if (!r.ok) throw new Error(`${name}.json: HTTP ${r.status}`);
+    return r.json();
+  }
+
+  async function jsonSerie() {
+    const r = await fetch("dados/serie.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(`serie.json: HTTP ${r.status}`);
     return r.json();
   }
 
@@ -423,8 +436,9 @@
     const entSel = document.getElementById("emp-entidade");
     const orgSel = document.getElementById("emp-orgao");
     if (!entSel || !orgSel) return;
-    entSel.innerHTML = state.despesas.entidades.map((e) => `<option value="${e.slug}">${esc(e.nome)}</option>`).join("");
-    entSel.value = state.despesas.entidades[0]?.slug || "prefeitura";
+    const ents = state.despesas.entidades.filter((e) => Number(e.unidades) > 0);
+    entSel.innerHTML = ents.map((e) => `<option value="${e.slug}">${esc(e.nome)}</option>`).join("");
+    entSel.value = ents[0]?.slug || "prefeitura";
     const povoar = () => {
       const slug = entSel.value;
       orgSel.innerHTML = `<option value="">Todos os órgãos</option>${state.despesas.unidades.filter((u) => u.slug === slug).map((u) => `<option value="${u.unid}">${esc(u.nome)}</option>`).join("")}`;
@@ -455,7 +469,52 @@
     });
   }
 
+  async function renderEmpenhosResumo() {
+    const aviso = document.getElementById("emp-aviso");
+    const painel = document.getElementById("emp-resumo");
+    const filtros = document.querySelector("#empenhos .filtros");
+    const tabela = document.querySelector("#tabela-empenhos")?.closest(".panel");
+    const mais = document.getElementById("emp-mais");
+    if (state.meta?.detalhe_empenhos) {
+      if (aviso) aviso.hidden = true;
+      if (painel) painel.hidden = true;
+      if (filtros) filtros.hidden = false;
+      if (tabela) tabela.hidden = false;
+      if (mais) mais.hidden = true;
+      return false;
+    }
+    if (filtros) filtros.hidden = true;
+    if (tabela) tabela.hidden = true;
+    if (mais) mais.hidden = true;
+    if (aviso) {
+      aviso.hidden = false;
+      aviso.innerHTML = `<b>Exercício ${esc(anoAtual())}: agregado.</b> A lista detalhada de empenhos é publicada apenas no exercício corrente. Use os filtros de Gastos/Fornecedores ou troque para ${esc(state.serie?.ano_atual || "")}.`;
+    }
+    if (!painel) return true;
+    painel.hidden = false;
+    const alvo = document.getElementById("emp-resumo-conteudo");
+    alvo.innerHTML = `<p class="nota">Carregando agregado…</p>`;
+    try {
+      if (!state.empResumo) state.empResumo = await json("empenhos_resumo");
+      const d = state.empResumo;
+      const ents = d.entidades || [];
+      const creds = d.credores || [];
+      alvo.innerHTML = `
+        <h3>Por entidade</h3>
+        <table class="mini"><thead><tr><th>Entidade</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th></tr></thead>
+        <tbody>${ents.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${money(e.emp)}</td><td class="num">${money(e.liq)}</td><td class="num">${money(e.pago)}</td></tr>`).join("")}</tbody></table>
+        <h3 style="margin-top:16px">Maiores fornecedores (sem folha/encargos)</h3>
+        <div class="table-wrap"><table class="mini"><thead><tr><th>Fornecedor</th><th>CNPJ</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th></tr></thead>
+        <tbody>${creds.slice(0, 30).map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(fmtDoc(c.doc))}</td><td class="num">${money(c.emp)}</td><td class="num">${money(c.liq)}</td><td class="num">${money(c.pago)}</td></tr>`).join("") || `<tr><td colspan="5" class="nota">Sem credores.</td></tr>`}</tbody></table></div>
+        <p class="nota">${esc(d.meta?.nota || "")}</p>`;
+    } catch (e) {
+      alvo.innerHTML = `<p class="nota">Não foi possível carregar o agregado: ${esc(e.message)}</p>`;
+    }
+    return true;
+  }
+
   async function renderEmpenhos() {
+    if (await renderEmpenhosResumo()) return;
     const tbody = document.querySelector("#tabela-empenhos tbody");
     if (!tbody) return;
     const slug = document.getElementById("emp-entidade").value || "prefeitura";
@@ -576,6 +635,11 @@
       state.fornFiltrados = rows;
       const page = rows.slice(0, state.fornLimite);
       const meta = dados.meta;
+      const aviso = document.getElementById("forn-aviso");
+      if (aviso) {
+        aviso.hidden = Boolean(meta.detalhe_empenhos);
+        aviso.innerHTML = `<b>Exercício ${esc(anoAtual())}: agregado.</b> O ranking e os totais estão completos; os empenhos individuais do dossiê estão disponíveis apenas no exercício corrente.`;
+      }
       document.getElementById("forn-kpis").innerHTML = [
         card("Fornecedores com CNPJ", String(meta.total_pj), `${meta.total_fornecedores} linhas (PF agregada)`, "hero"),
         cardMoney("Empenhado a fornecedores", meta.total_emp, `de ${money(meta.total_geral)} no total`),
@@ -702,6 +766,8 @@
     tbody.innerHTML = `<tr><td colspan="8" class="nota">Carregando licitações…</td></tr>`;
     try {
       const dados = await ensureLicitacoes();
+      avisarSemFonte("lic-aviso", dados.meta?.disponivel,
+        "O PNCP cobre 2024–2026; este exercício fica sem licitações detalhadas.");
       const modSel = document.getElementById("lic-modalidade");
       const sitSel = document.getElementById("lic-situacao");
       if (modSel.options.length <= 1) {
@@ -801,6 +867,8 @@
     tbody.innerHTML = `<tr><td colspan="8" class="nota">Carregando contratos…</td></tr>`;
     try {
       const dados = await ensureContratos();
+      avisarSemFonte("con-aviso", dados.meta?.disponivel,
+        "O PNCP cobre 2024–2026; este exercício fica sem contratos detalhados.");
       const rows = filtrarContratos(dados);
       state.conFiltrados = rows;
       const page = rows.slice(0, state.conLimite);
@@ -965,8 +1033,8 @@
     const propria = Number(m.propria || 0);
     const transf = Number(m.transferencias || 0);
     document.getElementById("rec-kpis").innerHTML = [
-      cardMoney("Arrecadado", total, `até ${m.ate || "—"} · out parcial`, "hero"),
-      cardMoney("Previsto inicial", m.prev_inicial, "LOA 2026"),
+      cardMoney("Arrecadado", total, `até ${m.ate || "—"}${state.meta?.fechado ? " · exercício fechado" : ` · ${mesNome(state.meta?.mes_parcial)} parcial`}`, "hero"),
+      cardMoney("Previsto inicial", m.prev_inicial, `LOA ${anoAtual()}`),
       cardMoney("Previsto atualizado", prevAtu, prevAtu ? `${percent(total / prevAtu)} arrecadado` : ""),
       cardMoney("Receita própria", propria, total ? `${percent(propria / total)} do arrecadado` : ""),
       cardMoney("Transferências", transf, total ? `${percent(transf / total)} do arrecadado` : ""),
@@ -990,7 +1058,7 @@
   const ALUG_ALERTA_LABEL = {
     sem_pagamento: "sem pagamento",
     fora_vigencia: "fora da vigência",
-    sem_contrato: "sem contrato 2026",
+    sem_contrato: "sem contrato no exercício",
   };
 
   function alugAlertaBadges(g) {
@@ -1051,7 +1119,7 @@
     };
     el.innerHTML = bloco("sem_pagamento", "Sem pagamento", "warn")
       + bloco("fora_vigencia", "Fora da vigência", "bad")
-      + bloco("sem_contrato", "Sem contrato 2026", "warn");
+      + bloco("sem_contrato", `Sem contrato ${anoAtual()}`, "warn");
   }
 
   function renderAlugLocadores(rows) {
@@ -1115,7 +1183,7 @@
     const contratos = (g.contratos || []).map((c) => `<tr>
       <td>${esc(c.numero)}</td><td>${esc(c.inicio)} a ${esc(c.fim)}</td>
       <td class="num">${money(c.valor)}</td><td>${contratoStatus(c)}</td>
-    </tr>`).join("") || `<tr><td colspan="4" class="nota">Sem contrato com vigência em 2026.</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="4" class="nota">Sem contrato com vigência em ${anoAtual()}.</td></tr>`;
     const emps = (g.empenhos_top || []).map((e) => `<tr>
       <td>${esc(e.data)}</td><td class="cod">${esc(e.empenho)}</td><td>${esc(e.entidade)}</td>
       <td class="num">${money(e.valor)}</td><td class="num">${money(e.pago)}</td>
@@ -1140,6 +1208,8 @@
     const rec = state.alugueis;
     if (!rec) return;
     const m = rec.meta || {};
+    avisarSemFonte("alug-aviso", m.disponivel,
+      "O PNCP cobre 2024–2026; a execução de locação continua visível em Gastos/Fornecedores.");
     const semPagamento = new Set((rec.locadores || []).filter((g) => Number(g.qtd_empenhos || 0) === 0).map((g) => g.chave));
     const locadores = filtrarAlugLocadores(rec);
     const contratos = filtrarAlugContratos(rec, semPagamento);
@@ -1149,13 +1219,13 @@
 
     document.getElementById("alug-kpis").innerHTML = [
       card("Contratos de locação", String(m.contratos || 0), `vigência ${m.ano}`, "hero"),
-      card("Locadores com contrato", String(m.locadores || 0), `${m.sem_contrato || 0} sem contrato 2026`),
+      card("Locadores com contrato", String(m.locadores || 0), `${m.sem_contrato || 0} sem contrato em ${anoAtual()}`),
       cardMoney("Valor contratado", m.valor_contratado, "soma dos contratos de imóvel"),
-      cardMoney("Empenhado (contrato 2026)", m.emp_contratos, m.valor_contratado ? `${percent(m.emp_contratos / m.valor_contratado)} do contratado` : ""),
-      cardMoney("Pago (contrato 2026)", m.pago_contratos, m.emp_contratos ? `${percent(m.pago_contratos / m.emp_contratos)} do empenhado` : ""),
-      cardMoney("Pago total", m.pago, "inclui locadores sem contrato 2026"),
+      cardMoney(`Empenhado (contrato ${anoAtual()})`, m.emp_contratos, m.valor_contratado ? `${percent(m.emp_contratos / m.valor_contratado)} do contratado` : ""),
+      cardMoney(`Pago (contrato ${anoAtual()})`, m.pago_contratos, m.emp_contratos ? `${percent(m.pago_contratos / m.emp_contratos)} do empenhado` : ""),
+      cardMoney("Pago total", m.pago, `inclui locadores sem contrato em ${anoAtual()}`),
       cardMoney("A pagar total", m.a_pagar, "liquidado − pago", "alert"),
-      card("Sem pagamento", String(m.sem_pagamento || 0), "contrato(s) sem empenho em 2026", "alert"),
+      card("Sem pagamento", String(m.sem_pagamento || 0), `contrato(s) sem empenho em ${anoAtual()}`, "alert"),
       card("Fora da vigência", String(m.fora_vigencia || 0), "empenho(s) fora do contrato", "alert"),
     ].join("");
     document.getElementById("alug-nota").textContent = `${locadores.length} locador(es) · ${contratos.length} contrato(s) · ${semContrato.length} sem contrato · até ${m.ate || "—"}`;
@@ -1311,20 +1381,28 @@
   function renderPanorama() {
     const p = state.panorama;
     const t = p.totais;
+    const ate = rotuloAte();
+    const fechado = Boolean(state.meta?.fechado);
     document.getElementById("panorama-kpis").innerHTML = [
       cardMoney("Dotação atualizada", t.dot_atu, `fixada ${money(t.dot_fix)}`, "hero"),
-      cardMoney("Empenhado até out", t.emp_ytd, `${percent(t.exec)} da dotação`),
-      cardMoney("Liquidado até out", t.liq_ytd, `movimento out ${money(t.liq_mes)}`),
-      cardMoney("Pago até out", t.pago_ytd, `movimento out ${money(t.pago_mes)}`),
-      cardMoney("Saldo a empenhar", t.saldo, "dotação − empenhado"),
-      cardMoney("Projeção fechada Jan-Ago", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
-      cardMoney("Projeção provisória Jan-Set", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
+      cardMoney(`Empenhado até ${ate}`, t.emp_ytd, `${percent(t.exec)} da dotação`),
+      cardMoney(`Liquidado até ${ate}`, t.liq_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.liq_mes)}`),
+      cardMoney(`Pago até ${ate}`, t.pago_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.pago_mes)}`),
+      cardMoney("Saldo a empenhar", t.saldo, "dotação - empenhado"),
+      fechado
+        ? cardMoney("Exercício encerrado", t.liq_ytd, "realizado = total do ano")
+        : cardMoney("Projeção fechada", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
+      fechado
+        ? card("Situação", "Fechado", `base até 31/12/${anoAtual()}`)
+        : cardMoney("Projeção provisória", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
     ].join("");
 
     document.getElementById("fechamento").innerHTML = `<table><thead><tr><th>Bimestre</th><th>Status</th><th>Referência</th></tr></thead><tbody>${p.fechamento.bimestres.map((b) => `<tr><td>${esc(b.nome)}</td><td><span class="pill ${b.status === "fechado" ? "ok" : "warn"}">${esc(b.status)}</span></td><td>${esc(b.fechado_em || b.base_ate || b.previsao || "")}</td></tr>`).join("")}</tbody></table>`;
-    document.getElementById("projecoes").innerHTML = `
-      <div class="box"><span>Fechada Jan-Ago</span><b>${money(t.proj_ago)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_ago)}</span></div>
-      <div class="box"><span>Provisória Jan-Set</span><b>${money(t.proj_set)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_set)}</span></div>
+    document.getElementById("projecoes").innerHTML = fechado
+      ? `<div class="box"><span>Exercício ${anoAtual()}</span><b>Encerrado</b><span class="nota">sem projeção; números realizados</span></div>`
+      : `
+      <div class="box"><span>Fechada ${mesNome(state.meta?.mes_fechado)}</span><b>${money(t.proj_ago)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_ago)}</span></div>
+      <div class="box"><span>Provisória ${mesNome(state.meta?.mes_provisorio)}</span><b>${money(t.proj_set)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_set)}</span></div>
       <div class="box"><span>Conservadora (teto no empenhado)</span><b>${money(t.proj_cap)}</b><span class="nota">saldo ${money(t.saldo_cap)}</span></div>`;
 
     const alertas = p.alertas || [];
@@ -1338,13 +1416,46 @@
     const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq, m.pago]));
     const ent = p.entidades || [];
     document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dotação</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provisória</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
-    document.getElementById("mensal").innerHTML = (p.mensal || []).map((m) => {
+    const mensalP = p.mensal || [];
+    document.getElementById("mensal").innerHTML = mensalP.length ? mensalP.map((m) => {
       const he = Math.max(1, (m.emp / max) * 100);
       const hl = Math.max(1, (m.liq / max) * 100);
       const hp = Math.max(1, (m.pago / max) * 100);
       return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)} · pago ${money(m.pago)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span><span class="b3" style="height:${hp}%"></span></div><span>${esc(m.nome)}</span></div>`;
-    }).join("");
+    }).join("") : `<p class="nota">Série mensal não capturada para este exercício; os totais anuais estão completos.</p>`;
     renderExecucao();
+    renderSerie();
+  }
+
+  function avisarSemFonte(id, disponivel, texto) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const sem = disponivel === false;
+    el.hidden = !sem;
+    if (sem) el.innerHTML = `<b>Fonte indisponível em ${esc(anoAtual())}.</b> ${esc(texto)}`;
+  }
+
+  function renderSerie() {
+    const el = document.getElementById("serie-historica");
+    if (!el) return;
+    const anos = (state.serie?.anos || []).filter((a) => a.totais);
+    if (!anos.length) { el.innerHTML = `<p class="nota">Série indisponível.</p>`; return; }
+    const max = Math.max(1, ...anos.flatMap((a) => [a.totais.receita_arrecadada || 0, a.totais.empenhado || 0]));
+    el.innerHTML = `<div class="serie-chart">${anos.map((a) => {
+      const rec = Number(a.totais.receita_arrecadada || 0);
+      const emp = Number(a.totais.empenhado || 0);
+      const atual = Number(a.ano) === anoAtual();
+      return `<div class="serie-row" title="${esc(a.ano)} · receita ${money(rec)} · empenhado ${money(emp)}">
+        <a href="?ano=${a.ano}" data-ano="${a.ano}" style="font-weight:${atual ? 800 : 600}">${esc(a.ano)}</a>
+        <span class="track"><span class="fill rec" style="width:${(rec / max * 100).toFixed(1)}%"></span></span>
+        <span class="track"><span class="fill" style="width:${(emp / max * 100).toFixed(1)}%"></span></span>
+      </div>`;
+    }).join("")}</div>
+    <div class="legend"><span><i class="sw-rec-propria"></i>Receita arrecadada</span><span><i class="sw-emp"></i>Despesa empenhada</span></div>
+    <p class="nota">Clique no ano para trocar o exercício. Exercício atual em negrito.</p>`;
+    el.querySelectorAll("a[data-ano]").forEach((a) => {
+      a.onclick = (e) => { e.preventDefault(); trocarAno(Number(a.dataset.ano)); };
+    });
   }
 
   function renderDespesas() {
@@ -1374,11 +1485,15 @@
     document.getElementById("despesas-kpis").innerHTML = [
       cardMoney("Dotação atualizada", t.dot_atu, `fixada ${money(t.dot_fix)}`, "hero"),
       cardMoney("Empenhado", t.emp_ytd, `${percent(t.exec)} da dotação`),
-      cardMoney("Liquidado", t.liq_ytd, `movimento out ${money(t.liq_mes)}`),
-      cardMoney("Pago", t.pago_ytd, `movimento out ${money(t.pago_mes)}`),
-      cardMoney("Saldo a empenhar", t.saldo, "dotação − empenhado"),
-      cardMoney("Projeção fechada", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
-      cardMoney("Projeção provisória", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
+      cardMoney("Liquidado", t.liq_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.liq_mes)}`),
+      cardMoney("Pago", t.pago_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.pago_mes)}`),
+      cardMoney("Saldo a empenhar", t.saldo, "dotação - empenhado"),
+      state.meta?.fechado
+        ? card("Exercício", "Fechado", `base até 31/12/${anoAtual()}`)
+        : cardMoney("Projeção fechada", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
+      state.meta?.fechado
+        ? cardMoney("Realizado", t.liq_ytd, "sem projeção")
+        : cardMoney("Projeção provisória", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
     ].join("");
     document.getElementById("despesas-nota").textContent = `${u.nome} · ${u.naturezas.length} naturezas · códigos ${u.codigos.join(", ")}`;
 
@@ -1417,19 +1532,38 @@
 
   function renderConferencia() {
     const c = state.conferencia.conferencia;
-    const ts = c.totais["09/2026"], to = c.totais["10/2026"];
+    const comps = Object.keys(c.totais || {});
+    const baseComp = c.base?.competencia;
+    const notas = comps.map((comp) => {
+      const t = c.totais[comp] || {};
+      const tags = [];
+      if (Math.abs(t.diff || 0) > 0.01) tags.push(`${t.falhas || 0} unid. liquidação`);
+      if (Math.abs(t.diff_emp || 0) > 0.01) tags.push(`${t.falhas_emp || 0} unid. empenho`);
+      const rotulo = comp === baseComp ? `${comp} (fechado)` : comp;
+      return cardMoney(
+        `${rotulo} — diferença`,
+        t.diff,
+        tags.length ? tags.join(" · ") : "fecha ao centavo",
+        Math.abs(t.diff || 0) <= 0.01 && Math.abs(t.diff_emp || 0) <= 0.01 ? "ok" : "alert",
+      );
+    });
+    const exercicio = c.exercicio || {};
     document.getElementById("conferencia-kpis").innerHTML = [
-      cardMoney("Set/2026 — diferença", ts.diff, `${ts.falhas} unidade(s) divergente(s)`, Math.abs(ts.diff) <= 0.01 ? "ok" : "alert"),
-      cardMoney("Out/2026 — diferença", to.diff, `${to.falhas} unidade(s) divergente(s)`, Math.abs(to.diff) <= 0.01 ? "ok" : "alert"),
-      cardMoney("Liquidações", ts.portal, `base ${c.raw || "—"} · cortes ${c.cortes?.["09/2026"] || "—"} e ${c.cortes?.["10/2026"] || "—"}`),
-      card("Portais", "2 competências", "set e out/2026; out é parcial"),
+      ...notas,
+      cardMoney("Receita arrecadada", exercicio.receita || 0, "CSV bruto líquido de anulado/deduções"),
+      cardMoney("Despesa liquidada", exercicio.despesa_liquidada || 0, "despesaclassificacao"),
     ].join("");
+    document.getElementById("conferencia-nota").textContent = c.raw
+      ? `Liquidações com Registro = Anulado deduzido · base ${c.raw} · corte(s) ${Object.values(c.cortes || {}).join(", ")}`
+      : "Liquidações com Registro = Anulado deduzido.";
     const rows = (c.linhas || []).slice().sort((a, b) => (a.entidade || "").localeCompare(b.entidade || "") || a.unid - b.unid || a.competencia.localeCompare(b.competencia));
     document.querySelector("#tabela-conferencia tbody").innerHTML = rows.map((r) => `<tr>
       <td>${esc(r.entidade || "")}</td><td>${esc(r.nome)}</td><td>${esc(r.competencia)}</td>
+      <td class="num">${money(r.calc_emp)}</td>
+      <td class="num ${Math.abs(r.diff_emp || 0) > 0.01 ? "bad" : "ok"}">${money(r.diff_emp)}</td>
       <td class="num">${money(r.calc)}</td><td class="num">${money(r.portal)}</td>
       <td class="num ${Math.abs(r.diff) > 0.01 ? "bad" : "ok"}">${money(r.diff)}</td>
-      <td><span class="pill ${r.status === "ok" ? "ok" : "bad"}">${esc(r.status)}</span></td>
+      <td><span class="pill ${r.status === "ok" && r.status_emp === "ok" ? "ok" : "bad"}">${esc(r.status === "ok" && r.status_emp === "ok" ? "ok" : "divergente")}</span></td>
     </tr>`).join("");
   }
 
@@ -1501,62 +1635,149 @@
     if (id === "cfem") renderCfem();
   }
 
+  function resetEstadoAno() {
+    Object.assign(state, {
+      meta: null, panorama: null, despesas: null, gastos: null,
+      conferencia: null, sobre: null, unidade: null, detalhes: {},
+      empenhos: {}, empResumo: null, empFiltrados: [],
+      fornecedores: null, fornFiltrados: [], licitacoes: null,
+      contratos: null, alugueis: null, receitas: null, recFiltrados: [],
+      cfem: null, cfemFiltrados: [], licFiltrados: [], conFiltrados: [],
+      alugFiltrados: [],
+    });
+  }
+
+  function popularSeletor() {
+    const sel = document.getElementById("ano-select");
+    if (!sel || !state.serie) return;
+    const anos = (state.serie.anos || []).slice().sort((a, b) => b.ano - a.ano);
+    sel.innerHTML = anos.map((a) => `<option value="${a.ano}">${a.ano}${a.fechado ? "" : " (aberto)"}</option>`).join("");
+    sel.value = String(state.ano);
+    sel.onchange = () => trocarAno(Number(sel.value));
+  }
+
+  function aplicarAnoUi() {
+    const m = state.meta || {};
+    const ano = anoAtual();
+    const badges = document.getElementById("badges");
+    if (badges) {
+      badges.innerHTML = m.fechado
+        ? `<span class="badge ok">Fechado: Jan-Dez/${ano}</span><span class="badge muted">Exercício encerrado</span>`
+        : `<span class="badge ok">Fechado: Jan-${mesNome(m.mes_fechado)}</span><span class="badge warn">Provisório: Jan-${mesNome(m.mes_provisorio)}</span><span class="badge muted">${mesNome(m.mes_parcial)}/${ano} parcial</span>`;
+    }
+    const semPncp = m.pncp_disponivel === false;
+    document.querySelectorAll('.tabs a[data-tab]').forEach((a) => {
+      if (["licitacoes", "contratos", "alugueis"].includes(a.dataset.tab)) a.hidden = semPncp;
+    });
+    const aviso = document.getElementById("aviso-ano");
+    if (aviso) {
+      const itens = [];
+      if (m.fechado) itens.push("Exercício encerrado: base Jan-Dez, sem projeção.");
+      if (m.detalhe_empenhos === false) itens.push("Empenhos detalhados disponíveis apenas no exercício corrente.");
+      if (semPncp) itens.push("Compras (PNCP) disponíveis a partir de 2024; Licitações, Contratos e Aluguéis ficam ocultos.");
+      aviso.hidden = itens.length === 0;
+      aviso.innerHTML = itens.length
+        ? `<b>Exercício ${ano}.</b> ${itens.map((x) => esc(x)).join(" ")}`
+        : "";
+    }
+    const sel = document.getElementById("ano-select");
+    if (sel) sel.value = String(ano);
+  }
+
+  async function carregarAno(ano, params = null) {
+    const req = ++state.anoReq;
+    state.ano = Number(ano);
+    resetEstadoAno();
+    const meta = await json("meta");
+    const [panorama, despesas, gastos, receitas, alugueis, cfem, conferencia, sobre] = await Promise.all([
+      json("panorama"), json("despesas"), json("gastos"), json("receitas"),
+      json("alugueis"), json("cfem"), json("conferencia"), json("sobre"),
+    ]);
+    if (req !== state.anoReq) return;
+    Object.assign(state, {
+      meta, panorama, despesas, gastos: gastos.gastos || gastos,
+      receitas, alugueis, cfem, conferencia, sobre,
+    });
+    aplicarAnoUi();
+    renderPanorama();
+    renderDespesas();
+    renderGastosFiltros();
+    renderGastos();
+    initReceitas();
+    initEmpenhosFiltros();
+    initFornecedoresFiltros();
+    initLicitacoesFiltros();
+    initContratosFiltros();
+    initAlugueisFiltros();
+    initCfemFiltros();
+    renderConferencia();
+    renderSobre();
+    const rodape = document.getElementById("rodape");
+    if (rodape) {
+      rodape.textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações + empenhos) · ${meta.municipio}/${meta.uf} · exercício ${ano} · gerado em ${meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
+    }
+    showTab();
+    if (!params) return;
+    const unidParam = Number(params.get("unid"));
+    if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
+      state.unidade = unidParam;
+      document.getElementById("filtro-unidade").value = String(unidParam);
+      renderDespesasUnit();
+    }
+    const codParam = params.get("cod");
+    if (codParam) {
+      if (!location.hash) location.hash = "#despesas";
+      setTimeout(() => abrirDetalhe(codParam), 200);
+    }
+    const entParam = params.get("ent");
+    if (entParam && meta.detalhe_empenhos) {
+      const sel = document.getElementById("emp-entidade");
+      if ([...sel.options].some((o) => o.value === entParam)) {
+        sel.value = entParam;
+        sel.onchange();
+      }
+    }
+    const empParam = params.get("emp");
+    if (empParam && meta.detalhe_empenhos) {
+      if (!location.hash) location.hash = "#empenhos";
+      setTimeout(async () => {
+        try {
+          const slug = document.getElementById("emp-entidade").value || "prefeitura";
+          const dados = await ensureEmpenhos(slug);
+          const campos = dados.meta?.campos || EMP_CAMPOS;
+          const e = dados.empenhos.map((r) => empObj(r, campos)).find((x) => String(x.empenho) === empParam);
+          if (e) abrirEmpenho(e);
+        } catch (_) { /* sem deep link se a entidade não carregar */ }
+      }, 300);
+    }
+  }
+
+  async function trocarAno(ano) {
+    if (!state.serie?.anos?.some((a) => a.ano === ano)) return;
+    const hash = location.hash || "#panorama";
+    history.replaceState(null, "", `?ano=${ano}${hash}`);
+    try {
+      await carregarAno(ano);
+    } catch (e) {
+      const el = document.getElementById("erro");
+      el.hidden = false;
+      el.innerHTML = `<b>Não foi possível trocar para ${esc(ano)}.</b><br>${esc(e.message)}`;
+    }
+  }
+
   async function init() {
     try {
-      state.meta = await json("meta");
-      const [panorama, despesas, gastos, receitas, alugueis, cfem, conferencia, sobre] = await Promise.all([
-        json("panorama"), json("despesas"), json("gastos"), json("receitas"),
-        json("alugueis"), json("cfem"), json("conferencia"), json("sobre"),
-      ]);
-      Object.assign(state, { panorama, despesas, gastos: gastos.gastos || gastos, receitas, alugueis, cfem, conferencia, sobre });
-      renderPanorama();
-      renderDespesas();
-      renderGastosFiltros();
-      renderGastos();
-      initReceitas();
-      initEmpenhosFiltros();
-      initFornecedoresFiltros();
-      initLicitacoesFiltros();
-      initContratosFiltros();
-      initAlugueisFiltros();
-      initCfemFiltros();
+      state.serie = await jsonSerie();
       const params = new URLSearchParams(location.search);
-      const unidParam = Number(params.get("unid"));
-      if (unidParam && state.despesas.unidades.some((u) => u.unid === unidParam)) {
-        state.unidade = unidParam;
-        document.getElementById("filtro-unidade").value = String(unidParam);
-        renderDespesasUnit();
-      }
-      const codParam = params.get("cod");
-      if (codParam) {
-        if (!location.hash) location.hash = "#despesas";
-        setTimeout(() => abrirDetalhe(codParam), 200);
-      }
-      renderConferencia();
-      renderSobre();
-      document.getElementById("rodape").textContent = `Fonte: Portal da Transparência (despesaclassificacao + liquidações + empenhos) · ${state.meta.municipio}/${state.meta.uf} · gerado em ${state.meta.gerado_em}. Dados públicos (LAI); sem CPF, folha individual ou nota interna.`;
-      showTab();
-      const entParam = params.get("ent");
-      if (entParam) {
-        const sel = document.getElementById("emp-entidade");
-        if ([...sel.options].some((o) => o.value === entParam)) {
-          sel.value = entParam;
-          sel.onchange();
-        }
-      }
-      const empParam = params.get("emp");
-      if (empParam) {
-        if (!location.hash) location.hash = "#empenhos";
-        setTimeout(async () => {
-          try {
-            const slug = document.getElementById("emp-entidade").value || "prefeitura";
-            const dados = await ensureEmpenhos(slug);
-            const campos = dados.meta?.campos || EMP_CAMPOS;
-            const e = dados.empenhos.map((r) => empObj(r, campos)).find((x) => String(x.empenho) === empParam);
-            if (e) abrirEmpenho(e);
-          } catch (_) { /* sem deep link se a entidade não carregar */ }
-        }, 300);
-      }
+      const anos = (state.serie.anos || []).map((a) => Number(a.ano));
+      const pedido = Number(params.get("ano"));
+      const inicial = anos.includes(pedido)
+        ? pedido
+        : (Number(state.serie.ano_atual) || Math.max(...anos));
+      state.ano = inicial;
+      popularSeletor();
+      await carregarAno(inicial, params);
+      popularSeletor();
       window.addEventListener("hashchange", showTab);
       document.getElementById("modal-close").onclick = fecharModal;
       document.querySelector("#modal .modal-backdrop").onclick = fecharModal;

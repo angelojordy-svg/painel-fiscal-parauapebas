@@ -17,6 +17,17 @@ h1 span{opacity:.9}
 .badge{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700}
 .badge.warn{background:rgba(255,196,80,.22);border-color:rgba(255,196,80,.55)}
 .badge.muted{opacity:.85}
+.ano-select{display:inline-flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;opacity:.95}
+.ano-select select{padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.14);color:#fff;font-weight:800;font-size:13px}
+.ano-select option{color:var(--ink)}
+.aviso{margin:0 0 16px;padding:12px 14px;border:1px solid #b9d4e8;background:#eef6fc;color:#0b4a70;border-radius:12px;font-size:13px}
+.aviso b{font-weight:800}
+.serie-chart{display:flex;flex-direction:column;gap:8px}
+.serie-row{display:grid;grid-template-columns:70px 1fr 1fr;gap:10px;align-items:center;font-size:12px}
+.serie-row .track{background:#e8eef4;border-radius:6px;height:16px;overflow:hidden}
+.serie-row .fill{display:block;height:100%;border-radius:6px;background:var(--brand)}
+.serie-row .fill.rec{background:#1f9d72}
+.serie-row .val{font-variant-numeric:tabular-nums;text-align:right;font-size:11.5px;color:var(--muted)}
 .tabs{display:flex;gap:6px;padding:12px 24px 0;overflow:auto}
 .tabs a{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:13px;font-weight:700;padding:8px 12px;border-radius:9px 9px 0 0;border:1px solid transparent;border-bottom:0}
 .tabs a:hover{color:var(--ink);background:#eef3f8}
