@@ -478,12 +478,12 @@
     if (state.meta?.detalhe_empenhos) {
       if (aviso) aviso.hidden = true;
       if (painel) painel.hidden = true;
-      if (filtros) filtros.hidden = false;
+      if (filtros) { filtros.hidden = false; filtros.style.display = ""; }
       if (tabela) tabela.hidden = false;
       if (mais) mais.hidden = true;
       return false;
     }
-    if (filtros) filtros.hidden = true;
+    if (filtros) { filtros.hidden = true; filtros.style.display = "none"; }
     if (tabela) tabela.hidden = true;
     if (mais) mais.hidden = true;
     if (aviso) {
