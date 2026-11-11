@@ -27,6 +27,45 @@
   };
   const anoAtual = () => Number(state.ano || state.meta?.ano || 0);
 
+  const MINUS = "\u2212";
+  const signedCompact = (v) => {
+    const n = Number(v || 0);
+    return `${n < 0 ? MINUS : ""}${moneyCompact(Math.abs(n))}`;
+  };
+
+  function sparkline(values, color) {
+    const clean = (values || []).filter((v) => Number.isFinite(Number(v))).map(Number);
+    if (!clean.length) return "";
+    const w = 120, h = 28, pad = 2;
+    const min = Math.min(...clean), max = Math.max(...clean);
+    const span = max - min || 1;
+    const pts = clean.map((v, i) => {
+      const x = pad + (i / Math.max(1, clean.length - 1)) * (w - pad * 2);
+      const y = h - pad - ((v - min) / span) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const area = `${pad},${h - pad} ${pts.join(" ")} ${w - pad},${h - pad}`;
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polygon points="${area}" fill="${color}" opacity=".08"></polygon><polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>`;
+  }
+
+  function niceMax(v) {
+    if (!v || v <= 0) return 1;
+    const exp = Math.floor(Math.log10(v));
+    const base = Math.pow(10, exp);
+    const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+    for (const s of steps) if (s * base >= v) return s * base;
+    return 10 * base;
+  }
+
+  const tickBRL = (v) => {
+    if (v === 0) return "0";
+    if (Math.abs(v) >= 1e9) return `${(v / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
+    if (Math.abs(v) >= 1e6) return `${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mi`;
+    return moneyCompact(v).replace("R$ ", "");
+  };
+
+  let serieModo = "abs";
+
   async function json(name) {
     const v = state.meta?.versao ? `?v=${encodeURIComponent(state.meta.versao)}` : "";
     const r = await fetch(`dados/${state.ano}/${name}.json${v}`, { cache: "no-store" });
@@ -68,6 +107,7 @@
     const seg = (cls, v, total) => (total > 0 && v > 0.005)
       ? `<span class="stack-seg ${cls}" style="width:${((v / total) * 100).toFixed(3)}%"></span>`
       : "";
+    const maxTotal = Math.max(1, ...rows.map((r) => Number(r.total || 0)));
     el.innerHTML = rows.map((r) => {
       const total = Number(r.total || 0);
       const pago = Number(r.pago || 0);
@@ -79,12 +119,13 @@
         ? (r.doc ? fmtDoc(r.doc) : (r.folha ? "folha/encargo" : "sem CNPJ"))
         : (r.entidade || "");
       const title = `${r.nome}${r.doc ? ` · ${fmtDoc(r.doc)}` : ""}\nEmpenhado ${money(r.emp)} · Liquidado ${money(r.liq)} · Pago ${money(r.pago)}\nA liquidar ${money(aLiq)} · A pagar ${money(aPagar)}${alertas.length ? `\nAtenção: ${alertas.join("; ")}` : ""}`;
-      const totalNote = total > Number(r.emp || 0) + 0.005 ? `<small>maior etapa ${money(total)}</small>` : "";
+      const totalNote = total > Number(r.emp || 0) + 0.005 ? `<small>maior etapa ${moneyCompact(total)}</small>` : "";
+      const width = Math.max(0.6, (total / maxTotal) * 100);
       return `<div class="stack-row" title="${esc(title)}">
         <span class="stack-label">${esc(r.nome)}${alerta}<small>${esc(sub)}</small></span>
-        <span class="stack-track">${seg("pago", pago, total)}${seg("a-pagar", aPagar, total)}${seg("a-liquidar", aLiq, total)}</span>
-        <span class="stack-total">${money(r.emp)}${totalNote}</span>
-        <span class="stack-diffs">pago ${money(pago)} · a pagar ${money(aPagar)} · a liquidar ${money(aLiq)}</span>
+        <span class="stack-track"><span class="stack-bar" style="width:${width.toFixed(2)}%">${seg("pago", pago, total)}${seg("a-pagar", aPagar, total)}${seg("a-liquidar", aLiq, total)}</span></span>
+        <span class="stack-total">${moneyCompact(r.emp)}${totalNote}</span>
+        <span class="stack-diffs">pago ${moneyCompact(pago)} · a pagar ${moneyCompact(aPagar)} · a liquidar ${moneyCompact(aLiq)}</span>
       </div>`;
     }).join("");
   }
@@ -122,7 +163,7 @@
     const ex = state.panorama?.execucao || {};
     const incluir = document.getElementById("incluir-folha")?.checked;
     const unidades = ex.por_unidade || [];
-    const credores = (incluir ? ex.por_credor_com_folha : ex.por_credor) || [];
+    const credores = ((incluir ? ex.por_credor_com_folha : ex.por_credor) || []).slice(0, 10);
     document.getElementById("legenda-execucao").innerHTML = LEGENDA_EXEC;
     document.getElementById("legenda-credores").innerHTML = LEGENDA_EXEC;
     stackedBars(document.getElementById("execucao-unidades"), unidades, { showDoc: false });
@@ -1380,51 +1421,255 @@
 
   function renderPanorama() {
     const p = state.panorama;
-    const t = p.totais;
-    const ate = rotuloAte();
-    const fechado = Boolean(state.meta?.fechado);
-    document.getElementById("panorama-kpis").innerHTML = [
-      cardMoney("Dotação atualizada", t.dot_atu, `fixada ${money(t.dot_fix)}`, "hero"),
-      cardMoney(`Empenhado até ${ate}`, t.emp_ytd, `${percent(t.exec)} da dotação`),
-      cardMoney(`Liquidado até ${ate}`, t.liq_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.liq_mes)}`),
-      cardMoney(`Pago até ${ate}`, t.pago_ytd, `movimento ${mesNome(state.meta?.mes_parcial)} ${money(t.pago_mes)}`),
-      cardMoney("Saldo a empenhar", t.saldo, "dotação - empenhado"),
-      fechado
-        ? cardMoney("Exercício encerrado", t.liq_ytd, "realizado = total do ano")
-        : cardMoney("Projeção fechada", t.proj_ago, `saldo ${money(t.saldo_ago)}`, "alert"),
-      fechado
-        ? card("Situação", "Fechado", `base até 31/12/${anoAtual()}`)
-        : cardMoney("Projeção provisória", t.proj_set, `saldo ${money(t.saldo_set)}`, "alert"),
-    ].join("");
-
-    document.getElementById("fechamento").innerHTML = `<table><thead><tr><th>Bimestre</th><th>Status</th><th>Referência</th></tr></thead><tbody>${p.fechamento.bimestres.map((b) => `<tr><td>${esc(b.nome)}</td><td><span class="pill ${b.status === "fechado" ? "ok" : "warn"}">${esc(b.status)}</span></td><td>${esc(b.fechado_em || b.base_ate || b.previsao || "")}</td></tr>`).join("")}</tbody></table>`;
-    document.getElementById("projecoes").innerHTML = fechado
-      ? `<div class="box"><span>Exercício ${anoAtual()}</span><b>Encerrado</b><span class="nota">sem projeção; números realizados</span></div>`
-      : `
-      <div class="box"><span>Fechada ${mesNome(state.meta?.mes_fechado)}</span><b>${money(t.proj_ago)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_ago)}</span></div>
-      <div class="box"><span>Provisória ${mesNome(state.meta?.mes_provisorio)}</span><b>${money(t.proj_set)}</b><span class="nota">13º só 3.1.90 · saldo ${money(t.saldo_set)}</span></div>
-      <div class="box"><span>Conservadora (teto no empenhado)</span><b>${money(t.proj_cap)}</b><span class="nota">saldo ${money(t.saldo_cap)}</span></div>`;
-
-    const alertas = p.alertas || [];
-    document.getElementById("alertas").innerHTML = alertas.length
-      ? `<p class="nota">${alertas.length} ponto(s) de atenção. Mostrando os 8 primeiros.</p><div class="alertas-list"><ul>${alertas.slice(0, 8).map((a) => `<li><b>${esc(a.nome)}</b> · ${esc(a.cod)} ${esc(a.natureza)}: ${esc(a.alertas.join("; "))}</li>`).join("")}</ul></div>`
-      : `<p class="pill ok">Nenhum ponto de atenção.</p>`;
-
-    bars(document.getElementById("top-unidades"), p.top_unidades || [], "emp", (r) => r.entidade === "Prefeitura" ? r.nome : `${r.entidade || ""} - ${r.nome}`);
-    bars(document.getElementById("top-naturezas"), p.top_naturezas || [], "liq", (r) => `${r.cod} · ${r.nome}`);
-
-    const max = Math.max(1, ...(p.mensal || []).flatMap((m) => [m.emp, m.liq, m.pago]));
-    const ent = p.entidades || [];
-    document.getElementById("entidades").innerHTML = `<table class="mini"><thead><tr><th>Entidade</th><th class="num">Unid.</th><th class="num">Dotação</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th class="num">Pago</th><th class="num">Proj. fechada</th><th class="num">Proj. provisória</th></tr></thead><tbody>${ent.map((e) => `<tr><td>${esc(e.nome)}</td><td class="num">${e.unidades}</td><td class="num">${money(e.totais.dot_atu)}</td><td class="num">${money(e.totais.emp_ytd)}</td><td class="num">${money(e.totais.liq_ytd)}</td><td class="num">${money(e.totais.pago_ytd)}</td><td class="num">${money(e.totais.proj_ago)}</td><td class="num">${money(e.totais.proj_set)}</td></tr>`).join("")}</tbody></table>`;
-    const mensalP = p.mensal || [];
-    document.getElementById("mensal").innerHTML = mensalP.length ? mensalP.map((m) => {
-      const he = Math.max(1, (m.emp / max) * 100);
-      const hl = Math.max(1, (m.liq / max) * 100);
-      const hp = Math.max(1, (m.pago / max) * 100);
-      return `<div class="mes" title="${esc(m.nome)} · empenhado ${money(m.emp)} · liquidado ${money(m.liq)} · pago ${money(m.pago)}"><div class="col"><span class="b1" style="height:${he}%"></span><span class="b2" style="height:${hl}%"></span><span class="b3" style="height:${hp}%"></span></div><span>${esc(m.nome)}</span></div>`;
-    }).join("") : `<p class="nota">Série mensal não capturada para este exercício; os totais anuais estão completos.</p>`;
-    renderExecucao();
+    if (!p) return;
+    renderHeroResult();
+    renderKpisPanorama();
+    renderInsightsPanorama();
     renderSerie();
+    renderFechamentoPanorama();
+    renderFluxoPanorama();
+    renderMensalPanorama();
+    renderOrigemReceitaPanorama();
+    renderAlertasPanorama();
+    renderExecucao();
+    const fluxoAte = document.getElementById("fluxo-ate");
+    if (fluxoAte) {
+      fluxoAte.textContent = state.meta?.fechado
+        ? "dezembro"
+        : `${mesNome(state.meta?.mes_parcial)} (parcial)`;
+    }
+  }
+
+  function renderHeroResult() {
+    const receita = Number(state.receitas?.meta?.total || 0);
+    const emp = Number(state.panorama?.totais?.emp_ytd || 0);
+    const diff = receita - emp;
+    const max = Math.max(receita, emp, 1);
+    const cls = diff >= 0 ? "pos" : "neg";
+    const box = document.getElementById("hero-result");
+    if (!box) return;
+    box.innerHTML = `<div>
+      <div class="r-label">Resultado no critério empenho · até ${esc(rotuloAte())}</div>
+      <div class="r-value ${cls}">${diff >= 0 ? "+" : MINUS} ${moneyCompact(Math.abs(diff))}</div>
+      <div class="r-sub">Receita arrecadada ${moneyCompact(receita)} · despesa empenhada ${moneyCompact(emp)}</div>
+      <div class="r-chip ${cls}">${diff >= 0 ? "Superávit" : "Déficit"} de ${moneyCompact(Math.abs(diff))}</div>
+      <div class="r-bars">
+        <div class="r-bar-row"><span>Receita</span><span class="r-bar-track"><i class="r-bar-fill rec" style="width:${(receita / max * 100).toFixed(1)}%"></i></span></div>
+        <div class="r-bar-row"><span>Empenhado</span><span class="r-bar-track"><i class="r-bar-fill desp" style="width:${(emp / max * 100).toFixed(1)}%"></i></span></div>
+      </div>
+    </div>
+    <p class="r-foot">Empenho não é caixa: parte da despesa ainda vai ser liquidada e paga. O resultado compara receita arrecadada com despesa empenhada no mesmo período.</p>`;
+  }
+
+  function renderKpisPanorama() {
+    const t = state.panorama?.totais || {};
+    const m = state.receitas?.meta || {};
+    const receita = Number(m.total || 0);
+    const prevista = Number(m.prev_atualizada || m.prev_inicial || 0);
+    const aPagar = Number(t.liq_ytd || 0) - Number(t.pago_ytd || 0);
+    const saldo = Number(t.dot_atu || 0) - Number(t.emp_ytd || 0);
+    const recMes = (state.receitas?.mensal || []).map((x) => Number(x.total || 0));
+    const mensal = state.panorama?.mensal || [];
+    const empCum = mensal.map((x) => Number(x.emp || 0));
+    const liqCum = mensal.map((x) => Number(x.liq || 0));
+    const pagoCum = mensal.map((x) => Number(x.pago || 0));
+    const aPagarCum = mensal.map((x) => Number(x.liq || 0) - Number(x.pago || 0));
+    const saldoCum = mensal.map((x) => Number(t.dot_atu || 0) - Number(x.emp || 0));
+    const cards = [
+      { label: "Receita arrecadada", value: moneyCompact(receita), note: `<b>${percent(receita / prevista)}</b> do previsto (${moneyCompact(prevista)})`, tone: "#0ea5e9", spark: sparkline(recMes, "#0ea5e9") },
+      { label: "Despesa empenhada", value: moneyCompact(t.emp_ytd), note: `<b>${percent(t.exec)}</b> da dotação atualizada`, tone: "#1d4ed8", spark: sparkline(empCum, "#1d4ed8") },
+      { label: "Liquidado", value: moneyCompact(t.liq_ytd), note: `<b>${percent(t.liq_ytd / t.emp_ytd)}</b> do empenhado`, tone: "#0f766e", spark: sparkline(liqCum, "#0f766e") },
+      { label: "Pago", value: moneyCompact(t.pago_ytd), note: `<b>${percent(t.pago_ytd / t.liq_ytd)}</b> do liquidado`, tone: "#15803d", spark: sparkline(pagoCum, "#15803d") },
+      { label: "Liquidado a pagar", value: moneyCompact(aPagar), note: "entrega conferida, ainda sem pagamento", tone: "#b45309", spark: sparkline(aPagarCum, "#b45309") },
+      { label: "Saldo a empenhar", value: moneyCompact(saldo), note: `dotação ${moneyCompact(t.dot_atu)} ${MINUS} empenhado`, tone: "#64748b", spark: sparkline(saldoCum, "#64748b") },
+    ];
+    const box = document.getElementById("panorama-kpis");
+    if (box) box.innerHTML = cards.map((c) => `<article class="kpi" style="--tone:${c.tone}">
+      <div class="k-label">${esc(c.label)}</div>
+      <div class="k-value">${esc(c.value)}</div>
+      <div class="k-note">${c.note}</div>
+      <div class="spark">${c.spark}</div>
+    </article>`).join("");
+  }
+
+  function renderInsightsPanorama() {
+    const m = state.receitas?.meta || {};
+    const t = state.panorama?.totais || {};
+    const receita = Number(m.total || 0);
+    const propria = Number(m.propria || 0);
+    const transf = Number(m.transferencias || 0);
+    const saldo = Number(t.dot_atu || 0) - Number(t.emp_ytd || 0);
+    const pagoShare = Number(t.pago_ytd || 0) / Number(t.liq_ytd || 1);
+    const icon = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+    const cards = [
+      { ico: icon('<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'), title: moneyCompact(propria), text: `${percent(propria / receita)} da receita é própria` },
+      { ico: icon('<path d="M3 12h18M3 6h18M3 18h18"/>'), title: percent(transf / receita), text: "vem de transferências" },
+      { ico: icon('<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>'), title: `${percent(t.exec)} da dotação`, text: `${moneyCompact(saldo)} ainda podem ser empenhados` },
+      { ico: icon('<path d="M20 6L9 17l-5-5"/>'), title: percent(pagoShare), text: "do liquidado já foi pago" },
+    ];
+    const box = document.getElementById("insights");
+    if (box) box.innerHTML = cards.map((c) => `<div class="insight"><span class="ico">${c.ico}</span><p><b>${esc(c.title)}</b>${esc(c.text)}</p></div>`).join("");
+  }
+
+  function renderFechamentoPanorama() {
+    const p = state.panorama;
+    const t = p.totais || {};
+    const f = p.fechamento || {};
+    const fechado = Boolean(state.meta?.fechado);
+    const c = state.meta?.cobertura || {};
+    const rows = (f.bimestres || []).map((b) => {
+      const ok = b.status === "fechado";
+      return `<div class="fech-row"><div><div class="fname">${esc(b.nome)}</div><div class="fref">${ok ? esc(b.fechado_em || b.base_ate || "—") : `previsão ${esc(b.previsao || "—")}`}</div></div><span class="pill ${ok ? "ok" : "warn"}">${ok ? "Fechado" : "Em aberto"}</span></div>`;
+    }).join("");
+    const box = document.getElementById("fechamento");
+    if (box) box.innerHTML = `<div class="fech-list">${rows}</div>
+      <div class="fech-meta">
+        <div><span>Base da despesa</span><b>${esc(state.meta?.raw_ate || "—")}</b></div>
+        <div><span>Base da receita</span><b>${esc(state.receitas?.meta?.ate || "—")}</b></div>
+        <div><span>Meses fechados</span><b>${Number(f.mes_fechado || 0)} de 12</b></div>
+        <div><span>Mês parcial</span><b>${esc(mesNome(state.meta?.mes_parcial))}/${anoAtual()}</b></div>
+        <div><span>Unidades com dados</span><b>${c.unidades_com_dados ?? "—"} de ${c.unidades_mapa ?? "—"}</b></div>
+        <div><span>Códigos cobertos</span><b>${c.codigos_cobertos ?? "—"}</b></div>
+      </div>`;
+    const proj = document.getElementById("projecoes");
+    if (proj) {
+      proj.innerHTML = fechado
+        ? `<div class="box"><span>Exercício ${anoAtual()}</span><b>Encerrado</b><span class="nota">sem projeção; números realizados</span></div>`
+        : `<div class="box"><span>Fechada ${mesNome(state.meta?.mes_fechado)}</span><b>${moneyCompact(t.proj_ago)}</b><span class="nota">13º só 3.1.90 · saldo ${moneyCompact(t.saldo_ago)}</span></div>
+           <div class="box"><span>Provisória ${mesNome(state.meta?.mes_provisorio)}</span><b>${moneyCompact(t.proj_set)}</b><span class="nota">13º só 3.1.90 · saldo ${moneyCompact(t.saldo_set)}</span></div>
+           <div class="box"><span>Conservadora</span><b>${moneyCompact(t.proj_cap)}</b><span class="nota">teto no empenhado · saldo ${moneyCompact(t.saldo_cap)}</span></div>`;
+    }
+  }
+
+  function renderFluxoPanorama() {
+    const t = state.panorama?.totais || {};
+    const base = Number(t.dot_atu) || 1;
+    const stages = [
+      { label: "Dotação atualizada", sub: "o que a lei autoriza", value: Number(t.dot_atu), color: "#94a3b8" },
+      { label: "Empenhado", sub: `${percent(t.exec)} da dotação`, value: Number(t.emp_ytd), color: "#1d4ed8" },
+      { label: "Liquidado", sub: "entrega conferida", value: Number(t.liq_ytd), color: "#0f766e" },
+      { label: "Pago", sub: "saiu do caixa", value: Number(t.pago_ytd), color: "#15803d" },
+    ];
+    const box = document.getElementById("fluxo");
+    if (!box) return;
+    box.innerHTML = stages.map((s, i) => {
+      const w = Math.max(0.6, (s.value / base) * 100);
+      const prev = i ? stages[i - 1].value : null;
+      const delta = prev == null ? "" : `<small>${MINUS} ${moneyCompact(prev - s.value)} na etapa</small>`;
+      return `<div class="fluxo-row">
+        <div class="f-label">${esc(s.label)}<small>${esc(s.sub)}</small></div>
+        <div class="fluxo-track"><div class="fluxo-fill" style="width:${w.toFixed(1)}%;background:${s.color}">${w > 18 ? percent(s.value / base) : ""}</div></div>
+        <div class="f-value">${moneyCompact(s.value)}${delta}</div>
+      </div>`;
+    }).join("");
+  }
+
+  function renderMensalPanorama() {
+    const el = document.getElementById("mensal");
+    if (!el) return;
+    const W = 900, H = 300, M = { l: 50, r: 12, t: 14, b: 30 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const recMap = new Map((state.receitas?.mensal || []).map((x) => [Number(x.mes), Number(x.total || 0)]));
+    const months = (state.panorama?.mensal || []).map((m) => ({
+      mes: Number(m.mes),
+      nome: m.nome,
+      emp: Number(m.emp_mes || 0),
+      liq: Number(m.liq_mes || 0),
+      pago: Number(m.pago_mes || 0),
+      rec: recMap.get(Number(m.mes)) || 0,
+    }));
+    if (!months.length) { el.innerHTML = `<p class="nota">Série mensal não capturada para este exercício; os totais anuais estão completos.</p>`; return; }
+    const max = niceMax(Math.max(...months.flatMap((m) => [m.emp, m.liq, m.pago, m.rec])));
+    const y = (v) => M.t + ih - (v / max) * ih;
+    const slot = iw / months.length;
+    const bw = Math.min(9, slot * 0.16);
+    const parcial = Number(state.meta?.mes_provisorio || 12);
+    let grid = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = (max / 4) * i;
+      const yy = y(v);
+      grid += `<line x1="${M.l}" y1="${yy.toFixed(1)}" x2="${W - M.r}" y2="${yy.toFixed(1)}" stroke="#eef2f7" stroke-width="1"/>`;
+      grid += `<text x="${M.l - 8}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#7f8ea3">${tickBRL(v)}</text>`;
+    }
+    let bars = "";
+    months.forEach((m, i) => {
+      const cx = M.l + slot * i + slot / 2;
+      const set = [
+        { v: m.emp, c: "#1d4ed8", label: "Empenhado" },
+        { v: m.liq, c: "#0f766e", label: "Liquidado" },
+        { v: m.pago, c: "#15803d", label: "Pago" },
+      ];
+      set.forEach((s, k) => {
+        const h = (s.v / max) * ih;
+        const x = cx - (bw * 3 + 4) / 2 + k * (bw + 2);
+        bars += `<rect x="${x.toFixed(1)}" y="${(M.t + ih - h).toFixed(1)}" width="${bw}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${s.c}" opacity="${m.mes >= parcial ? 0.55 : 1}"><title>${esc(m.nome)} · ${s.label} ${money(s.v)}</title></rect>`;
+      });
+      bars += `<text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="${m.mes >= parcial ? "#b45309" : "#7f8ea3"}" font-weight="600">${esc(m.nome)}</text>`;
+    });
+    const pts = months.map((m, i) => `${(M.l + slot * i + slot / 2).toFixed(1)},${y(m.rec).toFixed(1)}`).join(" ");
+    const dots = months.map((m, i) => `<circle cx="${(M.l + slot * i + slot / 2).toFixed(1)}" cy="${y(m.rec).toFixed(1)}" r="3" fill="#0ea5e9" stroke="#fff" stroke-width="1.4"><title>${esc(m.nome)} · Receita ${money(m.rec)}</title></circle>`).join("");
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Movimento mensal de receita, empenho, liquidação e pagamento">
+      ${grid}${bars}
+      <polyline points="${pts}" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      ${dots}
+      <line x1="${M.l}" y1="${M.t + ih}" x2="${W - M.r}" y2="${M.t + ih}" stroke="#dbe3ee" stroke-width="1"></line>
+    </svg>`;
+  }
+
+  function renderOrigemReceitaPanorama() {
+    const meta = state.receitas?.meta || {};
+    const total = Number(meta.total || 0) || 1;
+    const propria = Number(meta.propria || 0);
+    const transf = Number(meta.transferencias || 0);
+    const p1 = (propria / total) * 100;
+    const R = 62, C = 2 * Math.PI * R;
+    const dash = (p1 / 100) * C;
+    const top = [...(state.receitas?.origens || [])].sort((a, b) => Number(b.arrecadado) - Number(a.arrecadado)).slice(0, 5);
+    const maxO = Math.max(...top.map((o) => Number(o.arrecadado)), 1);
+    const entidades = state.receitas?.entidades || [];
+    const topNat = [...(state.panorama?.top_naturezas || [])].sort((a, b) => Number(b.liq) - Number(a.liq)).slice(0, 5);
+    const maxN = Math.max(...topNat.map((n) => Number(n.liq)), 1);
+    const box = document.getElementById("origem-receita");
+    if (!box) return;
+    box.innerHTML = `<div class="origem-grid">
+      <div class="donut">
+        <svg viewBox="0 0 160 160" aria-hidden="true">
+          <circle cx="80" cy="80" r="${R}" fill="none" stroke="#7dd3fc" stroke-width="18"></circle>
+          <circle cx="80" cy="80" r="${R}" fill="none" stroke="#0e7490" stroke-width="18" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-linecap="butt"></circle>
+        </svg>
+        <div class="donut-center"><div><b>${moneyCompact(total)}</b><small>arrecadado</small></div></div>
+      </div>
+      <div class="origem-bars">
+        <div class="origem-bar-row"><span class="o-name">Receita própria</span><span class="o-val">${moneyCompact(propria)}</span><div class="o-track"><i class="o-fill" style="width:${p1.toFixed(1)}%"></i></div></div>
+        <div class="origem-bar-row"><span class="o-name">Transferências</span><span class="o-val">${moneyCompact(transf)}</span><div class="o-track"><i class="o-fill" style="width:${(100 - p1).toFixed(1)}%;background:#7dd3fc"></i></div></div>
+        ${top.map((o) => `<div class="origem-bar-row"><span class="o-name" title="${esc(o.nome)}">${esc(o.nome)}</span><span class="o-val">${moneyCompact(o.arrecadado)}</span><div class="o-track"><i class="o-fill" style="width:${(Number(o.arrecadado) / maxO * 100).toFixed(1)}%"></i></div></div>`).join("")}
+        <p class="mini-title">Por entidade</p>
+        ${entidades.map((e) => {
+          const share = Number(e.total) ? Number(e.transferencias) / Number(e.total) : 0;
+          return `<div class="ent-row"><span>${esc(e.nome)}</span><b>${moneyCompact(e.total)}</b><small>${share > 0 ? `${percent(share)} de transferências` : "100% receita própria"}</small></div>`;
+        }).join("")}
+        <p class="mini-title">Maiores naturezas por liquidado</p>
+        ${topNat.map((n) => `<div class="origem-bar-row"><span class="o-name" title="${esc(n.nome)}">${esc(n.cod)} · ${esc(n.nome)}</span><span class="o-val">${moneyCompact(n.liq)}</span><div class="o-track"><i class="o-fill" style="width:${(Number(n.liq) / maxN * 100).toFixed(1)}%;background:linear-gradient(90deg,#0f766e,#34d399)"></i></div></div>`).join("")}
+      </div>
+    </div>
+    <p class="nota" style="margin:14px 0 0">Receita própria = impostos, taxas, contribuições e serviços. Transferências = FPM, ICMS, convênios e repasses. Dependência de ${percent(transf / total)}.</p>`;
+  }
+
+  function renderAlertasPanorama() {
+    const rows = (state.panorama?.alertas || []).map((a) => {
+      const dot = Number(a.dot_atu || 1);
+      const exec = Number(a.emp_ytd || 0) / dot;
+      const over = Number(a.proj_ago || 0) > dot;
+      return { ...a, exec, over };
+    }).sort((a, b) => (b.over - a.over) || (b.exec - a.exec)).slice(0, 8);
+    const count = document.getElementById("alerta-count");
+    if (count) count.textContent = rows.length ? `${rows.length} em destaque` : "sem alertas";
+    const box = document.getElementById("alertas");
+    if (!box) return;
+    box.innerHTML = rows.length ? rows.map((a) => `<div class="alert-item">
+      <div class="a-top"><div><div class="a-name">${esc(a.nome)}</div><div class="a-nat">${esc(a.natureza)}</div></div><span class="pill ${a.over ? "bad" : "warn"}">${a.over ? "Projeção acima" : "≥ 90%"}</span></div>
+      <div class="a-meta"><span>Dot. <b>${moneyCompact(a.dot_atu)}</b></span><span>Empenhado <b>${percent(a.exec)}</b></span><span>Saldo <b>${moneyCompact(a.saldo_est_ago)}</b></span></div>
+    </div>`).join("") : `<p class="pill ok">Nenhum ponto de atenção.</p>`;
   }
 
   function avisarSemFonte(id, disponivel, texto) {
@@ -1440,22 +1685,77 @@
     if (!el) return;
     const anos = (state.serie?.anos || []).filter((a) => a.totais);
     if (!anos.length) { el.innerHTML = `<p class="nota">Série indisponível.</p>`; return; }
-    const max = Math.max(1, ...anos.flatMap((a) => [a.totais.receita_arrecadada || 0, a.totais.empenhado || 0]));
-    el.innerHTML = `<div class="serie-chart">${anos.map((a) => {
+
+    const mode = serieModo;
+    const isPct = mode === "pct";
+    const rows = anos.map((a) => {
       const rec = Number(a.totais.receita_arrecadada || 0);
       const emp = Number(a.totais.empenhado || 0);
-      const atual = Number(a.ano) === anoAtual();
-      return `<div class="serie-row" title="${esc(a.ano)} · receita ${money(rec)} · empenhado ${money(emp)}">
-        <a href="?ano=${a.ano}" data-ano="${a.ano}" style="font-weight:${atual ? 800 : 600}">${esc(a.ano)}</a>
-        <span class="track"><span class="fill rec" style="width:${(rec / max * 100).toFixed(1)}%"></span></span>
-        <span class="track"><span class="fill" style="width:${(emp / max * 100).toFixed(1)}%"></span></span>
-      </div>`;
-    }).join("")}</div>
-    <div class="legend"><span><i class="sw-rec-propria"></i>Receita arrecadada</span><span><i class="sw-emp"></i>Despesa empenhada</span></div>
-    <p class="nota">Clique no ano para trocar o exercício. Exercício atual em negrito.</p>`;
-    el.querySelectorAll("a[data-ano]").forEach((a) => {
-      a.onclick = (e) => { e.preventDefault(); trocarAno(Number(a.dataset.ano)); };
+      const pago = Number(a.totais.pago || 0);
+      return {
+        ano: Number(a.ano),
+        fechado: Boolean(a.fechado),
+        rec, emp, pago,
+        recV: isPct ? (rec ? 1 : 0) : rec,
+        empV: isPct ? (rec ? emp / rec : 0) : emp,
+        pagoV: isPct ? (rec ? pago / rec : 0) : pago,
+      };
     });
+
+    const W = 760, H = 300, M = { l: 48, r: 10, t: 16, b: 30 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const all = rows.flatMap((r) => [r.recV, r.empV, r.pagoV]);
+    const max = isPct ? 1.2 : niceMax(Math.max(...all));
+    const y = (v) => M.t + ih - (v / max) * ih;
+    const slot = iw / rows.length;
+    const bw = Math.min(18, slot * 0.26);
+
+    let grid = "";
+    for (let i = 0; i <= 5; i++) {
+      const v = (max / 5) * i;
+      const yy = y(v);
+      grid += `<line x1="${M.l}" y1="${yy.toFixed(1)}" x2="${W - M.r}" y2="${yy.toFixed(1)}" stroke="#eef2f7" stroke-width="1"/>`;
+      grid += `<text x="${M.l - 8}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#7f8ea3">${isPct ? percent(v) : tickBRL(v)}</text>`;
+    }
+
+    let groups = "";
+    rows.forEach((r, i) => {
+      const cx = M.l + slot * i + slot / 2;
+      const partial = r.ano === anoAtual() && !r.fechado;
+      const op = partial ? 0.55 : 1;
+      const hRec = (r.recV / max) * ih;
+      const hEmp = (r.empV / max) * ih;
+      groups += `<g class="serie-g" data-ano="${r.ano}" style="cursor:pointer">
+        <rect x="${(cx - bw - 2).toFixed(1)}" y="${(M.t + ih - hRec).toFixed(1)}" width="${bw}" height="${Math.max(1, hRec).toFixed(1)}" rx="3" fill="#0ea5e9" opacity="${op}"><title>${r.ano} · Receita ${isPct ? percent(r.recV) : money(r.rec)}</title></rect>
+        <rect x="${(cx + 2).toFixed(1)}" y="${(M.t + ih - hEmp).toFixed(1)}" width="${bw}" height="${Math.max(1, hEmp).toFixed(1)}" rx="3" fill="#1d4ed8" opacity="${op}"><title>${r.ano} · Empenhado ${isPct ? percent(r.empV) : money(r.emp)}</title></rect>
+        <text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="${partial ? "#b45309" : "#7f8ea3"}" font-weight="${partial ? 800 : 600}">${r.ano}${partial ? "*" : ""}</text>
+      </g>`;
+    });
+
+    const pts = rows.map((r, i) => `${(M.l + slot * i + slot / 2).toFixed(1)},${y(r.pagoV).toFixed(1)}`).join(" ");
+    const dots = rows.map((r, i) => `<circle cx="${(M.l + slot * i + slot / 2).toFixed(1)}" cy="${y(r.pagoV).toFixed(1)}" r="3.2" fill="#15803d" stroke="#fff" stroke-width="1.5"><title>${r.ano} · Pago ${isPct ? percent(r.pagoV) : money(r.pago)}</title></circle>`).join("");
+
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Receita, despesa empenhada e paga por exercício">
+      ${grid}${groups}
+      <polyline points="${pts}" fill="none" stroke="#15803d" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      ${dots}
+      <line x1="${M.l}" y1="${M.t + ih}" x2="${W - M.r}" y2="${M.t + ih}" stroke="#dbe3ee" stroke-width="1"></line>
+    </svg>`;
+
+    el.querySelectorAll(".serie-g").forEach((g) => {
+      g.onclick = () => trocarAno(Number(g.dataset.ano));
+    });
+
+    const legend = document.getElementById("serie-legend");
+    if (legend) legend.innerHTML = `<span><i class="sw-rec"></i>Receita arrecadada</span><span><i class="sw-emp"></i>Despesa empenhada</span><span><i class="sw-pago"></i>Pago (linha)</span><span style="color:#b45309">* exercício em andamento</span>`;
+
+    const modeBox = document.getElementById("serie-mode");
+    if (modeBox) {
+      modeBox.querySelectorAll("button").forEach((b, i) => {
+        b.classList.toggle("on", (i === 0) === (mode === "abs"));
+        b.onclick = () => { serieModo = i === 0 ? "abs" : "pct"; renderSerie(); };
+      });
+    }
   }
 
   function renderDespesas() {
@@ -1651,7 +1951,8 @@
     const sel = document.getElementById("ano-select");
     if (!sel || !state.serie) return;
     const anos = (state.serie.anos || []).slice().sort((a, b) => b.ano - a.ano);
-    sel.innerHTML = anos.map((a) => `<option value="${a.ano}">${a.ano}${a.fechado ? "" : " (aberto)"}</option>`).join("");
+    sel.innerHTML = anos.map((a) => `<option value="${a.ano}">${a.ano}${a.fechado ? "" : " *"}</option>`).join("");
+    sel.title = "* exercício em andamento";
     sel.value = String(state.ano);
     sel.onchange = () => trocarAno(Number(sel.value));
   }
@@ -1659,6 +1960,13 @@
   function aplicarAnoUi() {
     const m = state.meta || {};
     const ano = anoAtual();
+    const heroAno = document.getElementById("hero-ano");
+    if (heroAno) heroAno.textContent = String(ano);
+    const status = document.querySelector("#status-atualizacao span");
+    if (status) {
+      const gerado = String(m.gerado_em || "").replace(/\/\d{4}\s+/, " ");
+      status.textContent = gerado ? `Atualizado ${gerado}` : "Atualizado";
+    }
     const badges = document.getElementById("badges");
     if (badges) {
       badges.innerHTML = m.fechado
