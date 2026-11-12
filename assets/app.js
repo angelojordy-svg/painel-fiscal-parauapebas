@@ -1682,6 +1682,14 @@
     return { cls: "ok", label: "Dentro do limite" };
   }
 
+  function lrfStatusMin(pct, minimo) {
+    const min = Number(minimo || 0);
+    const p = Number(pct || 0);
+    if (p >= min) return { cls: "ok", label: "Acima do mínimo" };
+    if (p >= min * 0.95) return { cls: "warn", label: "Próximo do mínimo" };
+    return { cls: "bad", label: "Abaixo do mínimo" };
+  }
+
   function renderLrfResumo() {
     const box = document.getElementById("lrf-resumo");
     if (!box) return;
@@ -1697,7 +1705,8 @@
       <div class="lrf-resumo-item"><span>RCL 12m</span><b>${moneyCompact(p.rcl_12m)}</b><small>referência ${esc(p.referencia)}</small></div>
       <div class="lrf-resumo-item"><span>DTP</span><b>${moneyCompact(p.dtp)}</b><small>RGF Anexo 1</small></div>
       <div class="lrf-resumo-status"><span class="pill ${st.cls}">${esc(st.label)}</span></div>
-    </div>`;
+    </div>
+    <p class="nota" style="margin:8px 0 0">Saúde ${l.saude?.disponivel ? pctNum(l.saude.pct) : "pendente"} · Educação ${l.educacao?.disponivel ? pctNum(l.educacao.pct) : "pendente"}</p>`;
   }
 
   function lrfCard(label, value, note, width, status) {
@@ -1718,19 +1727,36 @@
     </article>`;
   }
 
+  function lrfCardIndicator(label, data, minPct) {
+    if (data?.disponivel) {
+      const st = lrfStatusMin(data.pct, minPct);
+      return lrfCard(
+        label,
+        pctNum(data.pct),
+        `mínimo ${pctNum(minPct)} · ${data.referencia}`,
+        (Number(data.pct) / minPct) * 100,
+        st,
+      );
+    }
+    return lrfCardPending(label, minPct);
+  }
+
   function renderLrfPending(id, data, minPct, anexo) {
     const box = document.getElementById(id);
     if (!box) return;
     if (data?.disponivel) {
-      const st = lrfStatus(data.pct, data.minimo || minPct);
+      const st = lrfStatusMin(data.pct, minPct);
+      const municipal = data.minimo_municipal
+        ? ` · mínimo municipal ${pctNum(data.minimo_municipal)} (${moneyCompact(data.exigido_municipal)})`
+        : "";
       box.innerHTML = `<div class="lrf-metrics">
         <div><span>Base de cálculo</span><b>${moneyCompact(data.base)}</b></div>
-        <div><span>Despesa aplicada</span><b>${moneyCompact(data.despesa)}</b></div>
+        <div><span>Despesa aplicada</span><b>${moneyCompact(data.aplicado)}</b></div>
+        <div><span>Mínimo exigido</span><b>${moneyCompact(data.exigido)}</b></div>
         <div><span>% aplicado</span><b>${pctNum(data.pct)}</b></div>
-        <div><span>Mínimo</span><b>${pctNum(minPct)}</b></div>
       </div>
-      <div class="lrf-progress"><div class="lrf-progress-head"><span>${pctNum(data.pct)} aplicado</span><span>${esc(st.label)}</span></div><div class="lrf-progress-track"><i class="${st.cls}" style="width:${Math.min(100, Number(data.pct || 0) / minPct * 100).toFixed(1)}%"></i></div></div>
-      <p class="nota">Referência ${esc(data.referencia || "")} · ${esc(data.fonte || "")}</p>`;
+      <div class="lrf-progress"><div class="lrf-progress-head"><span>${pctNum(data.pct)} aplicado</span><span>${esc(st.label)}</span></div><div class="lrf-progress-track"><i class="${st.cls}" style="width:${Math.min(100, Number(data.pct || 0) / minPct * 100).toFixed(1)}%"></i></div><div class="lrf-progress-labels"><span>0%</span><span>mínimo ${pctNum(minPct)}</span></div></div>
+      <p class="nota">Referência ${esc(data.referencia || "")} · ${esc(data.fonte || "")}${esc(municipal)}</p>`;
       return;
     }
     box.innerHTML = `<div class="lrf-pending"><b>Aguardando RREO Anexo ${anexo}.</b><p>${esc(data?.motivo || "PDF não encontrado em In Put/XLSM.")}</p><p class="nota">O indicador entra automaticamente quando o PDF for colocado em In Put/XLSM e o gerador rodar.</p></div>`;
@@ -1754,8 +1780,8 @@
     const st = lrfStatus(p.pct_dtp, p.limite_pct);
     cards.innerHTML = [
       lrfCard("Pessoal", pctNum(p.pct_dtp), `limite ${pctNum(p.limite_pct)} · ${p.referencia}`, (p.pct_dtp / (p.limite_pct || 54)) * 100, st),
-      lrfCardPending("Saúde", 15),
-      lrfCardPending("Educação (MDE)", 25),
+      lrfCardIndicator("Saúde", l.saude, 15),
+      lrfCardIndicator("Educação (MDE)", l.educacao, 25),
     ].join("");
 
     const pbox = document.getElementById("lrf-pessoal");
@@ -1779,8 +1805,8 @@
       fbox.innerHTML = `<div class="lrf-sources">
         <div class="lrf-source"><span class="pill ok">OK</span><div><b>RREO Anexo 3 — RCL</b><small>${esc(p.pdfs.rreo)}</small></div></div>
         <div class="lrf-source"><span class="pill ok">OK</span><div><b>RGF Anexo 1 — Pessoal</b><small>${esc(p.pdfs.rgf)}</small></div></div>
-        <div class="lrf-source"><span class="pill warn">${l.saude.pdf ? "PDF ok" : "Pendente"}</span><div><b>RREO Anexo 12 — Saúde</b><small>${esc(l.saude.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
-        <div class="lrf-source"><span class="pill warn">${l.educacao.pdf ? "PDF ok" : "Pendente"}</span><div><b>RREO Anexo 8 — MDE</b><small>${esc(l.educacao.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
+        <div class="lrf-source"><span class="pill ${l.saude.disponivel ? "ok" : "warn"}">${l.saude.disponivel ? "OK" : "Pendente"}</span><div><b>RREO Anexo 12 — Saúde</b><small>${esc(l.saude.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
+        <div class="lrf-source"><span class="pill ${l.educacao.disponivel ? "ok" : "warn"}">${l.educacao.disponivel ? "OK" : "Pendente"}</span><div><b>RREO Anexo 8 — MDE</b><small>${esc(l.educacao.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
         <a class="lrf-link" href="https://www.governotransparente.com.br/gestaofiscal/documentos/45079490" target="_blank" rel="noopener">Consultar documentos oficiais ↗</a>
       </div>`;
     }
