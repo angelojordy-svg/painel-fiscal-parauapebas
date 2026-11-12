@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel Fiscal Parauapebas</title>
-<link rel="stylesheet" href="assets/app.css?v=20261112080713">
+<link rel="stylesheet" href="assets/app.css?v=20261112084331">
 </head>
 <body>
 <header class="topbar">
@@ -29,6 +29,7 @@
       <a href="#contratos" data-tab="contratos">Contratos</a>
       <a href="#alugueis" data-tab="alugueis">Aluguéis</a>
       <a href="#cfem" data-tab="cfem">CFEM</a>
+      <a href="#lrf" data-tab="lrf">LRF</a>
       <a href="#conferencia" data-tab="conferencia">Conferência</a>
       <a href="#sobre" data-tab="sobre">Sobre os dados</a>
     </nav>
@@ -87,10 +88,6 @@
         </header>
         <div id="fechamento"></div>
         <div id="projecoes" class="projecoes"></div>
-        <div class="lrf-teaser">
-          <span class="chip">LRF</span>
-          <p>Pessoal, saúde e educação entram aqui na próxima fase, com limite e indicador lado a lado.</p>
-        </div>
       </section>
     </div>
 
@@ -182,19 +179,15 @@
       </section>
     </div>
 
-    <section class="card lrf-placeholder">
+    <section class="card lrf-placeholder" id="lrf-resumo-card">
       <header class="card-head">
         <div>
           <h2>Indicadores LRF</h2>
-          <p>Pessoal, saúde e educação — integração prevista</p>
+          <p>Pessoal, saúde e educação</p>
         </div>
-        <span class="chip">Em breve</span>
+        <a class="chip" href="#lrf">Ver aba LRF →</a>
       </header>
-      <div class="lrf-grid">
-        <div class="lrf-item"><span>Pessoal</span><strong>—</strong><small>% da RCL · limite de 54%</small></div>
-        <div class="lrf-item"><span>Saúde</span><strong>—</strong><small>mínimo de 15% da receita</small></div>
-        <div class="lrf-item"><span>Educação</span><strong>—</strong><small>mínimo de 25% da receita</small></div>
-      </div>
+      <div id="lrf-resumo"></div>
     </section>
   </section>
 
@@ -723,6 +716,51 @@
     </section>
   </section>
 
+  <section id="lrf" class="tab" hidden>
+    <div class="lrf-head">
+      <p class="eyebrow">Lei de Responsabilidade Fiscal</p>
+      <h1>Indicadores LRF <span id="lrf-ano"></span></h1>
+      <p class="lede">Receita Corrente Líquida, despesa com pessoal, saúde e educação — com a data de referência de cada fonte oficial.</p>
+    </div>
+
+    <div id="lrf-cards" class="lrf-cards"></div>
+
+    <div class="layout-2">
+      <section class="card">
+        <header class="card-head">
+          <div><h2>Pessoal</h2><p>RCL ajustada × despesa total com pessoal</p></div>
+          <span class="chip" id="lrf-pessoal-ref"></span>
+        </header>
+        <div id="lrf-pessoal"></div>
+      </section>
+      <section class="card">
+        <header class="card-head">
+          <div><h2>Fontes oficiais</h2><p>RREO e RGF</p></div>
+        </header>
+        <div id="lrf-fontes"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <header class="card-head">
+        <div><h2>RCL × pessoal</h2><p>Valores mensais do exercício</p></div>
+        <div class="legend inline"><span><i class="sw-rec"></i>RCL</span><span><i class="sw-emp"></i>Pessoal</span></div>
+      </header>
+      <div id="lrf-chart" class="chart"></div>
+    </section>
+
+    <div class="layout-2">
+      <section class="card">
+        <header class="card-head"><div><h2>Saúde</h2><p>Aplicação mínima de 15%</p></div></header>
+        <div id="lrf-saude"></div>
+      </section>
+      <section class="card">
+        <header class="card-head"><div><h2>Educação (MDE)</h2><p>Aplicação mínima de 25%</p></div></header>
+        <div id="lrf-educacao"></div>
+      </section>
+    </div>
+  </section>
+
   <section id="conferencia" class="tab" hidden>
     <div id="conferencia-kpis" class="grid"></div>
     <div class="panel">
@@ -761,6 +799,6 @@
   <span id="rodape">Carregando…</span>
   <p class="footer-links"><a class="externo" href="https://angelojordy-svg.github.io/diario-parauapebas/" target="_blank" rel="noopener">Diário Oficial ↗</a> · <a class="externo" href="https://angelojordy-svg.github.io/analise-contas-pmp/" target="_blank" rel="noopener">Servidores/FOPAG ↗</a></p>
 </footer>
-<script src="assets/app.js?v=20261112080713" defer></script>
+<script src="assets/app.js?v=20261112084331" defer></script>
 </body>
 </html>

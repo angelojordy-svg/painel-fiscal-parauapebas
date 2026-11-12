@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { ano: null, serie: null, meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empResumo: null, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [], cfem: null, cfemFiltrados: [], anoReq: 0 };
+  const state = { ano: null, serie: null, meta: null, panorama: null, despesas: null, gastos: null, conferencia: null, sobre: null, unidade: null, detalhes: {}, empenhos: {}, empResumo: null, empLimite: 100, empReq: 0, empFiltrados: [], fornecedores: null, fornLimite: 100, fornReq: 0, fornFiltrados: [], licitacoes: null, contratos: null, licLimite: 50, conLimite: 50, licFiltrados: [], conFiltrados: [], receitas: null, lrf: null, recOrigem: "", recFiltrados: [], alugueis: null, alugLimite: 20, alugFiltrados: [], cfem: null, cfemFiltrados: [], anoReq: 0 };
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const pct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const pct2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,6 +18,7 @@
   };
   const percent = (v) => `${pct.format(Number(v || 0) * 100)}%`;
   const percent2 = (v) => `${pct2.format(Number(v || 0) * 100)}%`;
+  const pctNum = (v) => `${Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   const mesNome = (m) => MESES[(Number(m) || 1) - 1] || "";
@@ -1431,6 +1432,7 @@
     renderMensalPanorama();
     renderOrigemReceitaPanorama();
     renderAlertasPanorama();
+    renderLrfResumo();
     renderExecucao();
     const fluxoAte = document.getElementById("fluxo-ate");
     if (fluxoAte) {
@@ -1670,6 +1672,158 @@
       <div class="a-top"><div><div class="a-name">${esc(a.nome)}</div><div class="a-nat">${esc(a.natureza)}</div></div><span class="pill ${a.over ? "bad" : "warn"}">${a.over ? "Projeção acima" : "≥ 90%"}</span></div>
       <div class="a-meta"><span>Dot. <b>${moneyCompact(a.dot_atu)}</b></span><span>Empenhado <b>${percent(a.exec)}</b></span><span>Saldo <b>${moneyCompact(a.saldo_est_ago)}</b></span></div>
     </div>`).join("") : `<p class="pill ok">Nenhum ponto de atenção.</p>`;
+  }
+
+  function lrfStatus(pct, limit) {
+    const l = Number(limit || 54);
+    const p = Number(pct || 0);
+    if (p > l) return { cls: "bad", label: "Acima do limite" };
+    if (p >= l * 0.95) return { cls: "warn", label: "No limite prudencial" };
+    return { cls: "ok", label: "Dentro do limite" };
+  }
+
+  function renderLrfResumo() {
+    const box = document.getElementById("lrf-resumo");
+    if (!box) return;
+    const l = state.lrf;
+    const p = l?.pessoal;
+    if (!p?.disponivel) {
+      box.innerHTML = `<p class="nota">LRF aguardando os PDFs oficiais (RREO/RGF) do exercício.</p>`;
+      return;
+    }
+    const st = lrfStatus(p.pct_dtp, p.limite_pct);
+    box.innerHTML = `<div class="lrf-resumo-row">
+      <div class="lrf-resumo-item"><span>Pessoal / RCL</span><b>${pctNum(p.pct_dtp)}</b><small>limite ${pctNum(p.limite_pct)} · margem ${moneyCompact(p.margem)}</small></div>
+      <div class="lrf-resumo-item"><span>RCL 12m</span><b>${moneyCompact(p.rcl_12m)}</b><small>referência ${esc(p.referencia)}</small></div>
+      <div class="lrf-resumo-item"><span>DTP</span><b>${moneyCompact(p.dtp)}</b><small>RGF Anexo 1</small></div>
+      <div class="lrf-resumo-status"><span class="pill ${st.cls}">${esc(st.label)}</span></div>
+    </div>`;
+  }
+
+  function lrfCard(label, value, note, width, status) {
+    return `<article class="lrf-card">
+      <div class="lrf-card-top"><span>${esc(label)}</span><span class="pill ${status.cls}">${esc(status.label)}</span></div>
+      <div class="lrf-big">${esc(value)}</div>
+      <div class="lrf-note">${esc(note)}</div>
+      <div class="lrf-mini-track"><i class="${status.cls}" style="width:${Math.min(100, Math.max(0, Number(width || 0))).toFixed(1)}%"></i></div>
+    </article>`;
+  }
+
+  function lrfCardPending(label, minPct) {
+    return `<article class="lrf-card pending">
+      <div class="lrf-card-top"><span>${esc(label)}</span><span class="pill warn">Pendente</span></div>
+      <div class="lrf-big">—</div>
+      <div class="lrf-note">mínimo ${minPct}% · aguardando RREO</div>
+      <div class="lrf-mini-track"><i class="warn" style="width:0%"></i></div>
+    </article>`;
+  }
+
+  function renderLrfPending(id, data, minPct, anexo) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    if (data?.disponivel) {
+      const st = lrfStatus(data.pct, data.minimo || minPct);
+      box.innerHTML = `<div class="lrf-metrics">
+        <div><span>Base de cálculo</span><b>${moneyCompact(data.base)}</b></div>
+        <div><span>Despesa aplicada</span><b>${moneyCompact(data.despesa)}</b></div>
+        <div><span>% aplicado</span><b>${pctNum(data.pct)}</b></div>
+        <div><span>Mínimo</span><b>${pctNum(minPct)}</b></div>
+      </div>
+      <div class="lrf-progress"><div class="lrf-progress-head"><span>${pctNum(data.pct)} aplicado</span><span>${esc(st.label)}</span></div><div class="lrf-progress-track"><i class="${st.cls}" style="width:${Math.min(100, Number(data.pct || 0) / minPct * 100).toFixed(1)}%"></i></div></div>
+      <p class="nota">Referência ${esc(data.referencia || "")} · ${esc(data.fonte || "")}</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="lrf-pending"><b>Aguardando RREO Anexo ${anexo}.</b><p>${esc(data?.motivo || "PDF não encontrado em In Put/XLSM.")}</p><p class="nota">O indicador entra automaticamente quando o PDF for colocado em In Put/XLSM e o gerador rodar.</p></div>`;
+  }
+
+  function renderLrf() {
+    const anoEl = document.getElementById("lrf-ano");
+    if (anoEl) anoEl.textContent = String(anoAtual());
+    const cards = document.getElementById("lrf-cards");
+    if (!cards) return;
+    const l = state.lrf;
+    if (!l || !l.disponivel) {
+      cards.innerHTML = `<div class="lrf-pending"><b>LRF indisponível para ${anoAtual()}.</b><p>${esc(l?.pessoal?.motivo || "RREO Anexo 3 e RGF Anexo 1 não encontrados em In Put/XLSM.")}</p></div>`;
+      ["lrf-pessoal", "lrf-fontes", "lrf-chart", "lrf-saude", "lrf-educacao"].forEach((id) => {
+        const e = document.getElementById(id);
+        if (e) e.innerHTML = "";
+      });
+      return;
+    }
+    const p = l.pessoal;
+    const st = lrfStatus(p.pct_dtp, p.limite_pct);
+    cards.innerHTML = [
+      lrfCard("Pessoal", pctNum(p.pct_dtp), `limite ${pctNum(p.limite_pct)} · ${p.referencia}`, (p.pct_dtp / (p.limite_pct || 54)) * 100, st),
+      lrfCardPending("Saúde", 15),
+      lrfCardPending("Educação (MDE)", 25),
+    ].join("");
+
+    const pbox = document.getElementById("lrf-pessoal");
+    if (pbox) {
+      pbox.innerHTML = `<div class="lrf-metrics">
+        <div><span>RCL ajustada 12m</span><b>${moneyCompact(p.rcl_ajustada)}</b></div>
+        <div><span>Despesa total com pessoal</span><b>${moneyCompact(p.dtp)}</b></div>
+        <div><span>Limite ${pctNum(p.limite_pct)}</span><b>${moneyCompact(p.limite_maximo)}</b></div>
+        <div><span>Margem até o limite</span><b>${moneyCompact(p.margem)}</b></div>
+      </div>
+      <div class="lrf-progress">
+        <div class="lrf-progress-head"><span>${pctNum(p.pct_dtp)} da RCL</span><span>${esc(st.label)}</span></div>
+        <div class="lrf-progress-track"><i class="${st.cls}" style="width:${Math.min(100, p.pct_dtp / (p.limite_pct || 54) * 100).toFixed(1)}%"></i></div>
+        <div class="lrf-progress-labels"><span>0%</span><span>limite ${pctNum(p.limite_pct)}</span></div>
+      </div>
+      <p class="nota">RCL = RREO Anexo 3; DTP = RGF Anexo 1. Referência ${esc(p.referencia)}. ${esc(l.nota_escopo)}</p>`;
+    }
+
+    const fbox = document.getElementById("lrf-fontes");
+    if (fbox) {
+      fbox.innerHTML = `<div class="lrf-sources">
+        <div class="lrf-source"><span class="pill ok">OK</span><div><b>RREO Anexo 3 — RCL</b><small>${esc(p.pdfs.rreo)}</small></div></div>
+        <div class="lrf-source"><span class="pill ok">OK</span><div><b>RGF Anexo 1 — Pessoal</b><small>${esc(p.pdfs.rgf)}</small></div></div>
+        <div class="lrf-source"><span class="pill warn">${l.saude.pdf ? "PDF ok" : "Pendente"}</span><div><b>RREO Anexo 12 — Saúde</b><small>${esc(l.saude.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
+        <div class="lrf-source"><span class="pill warn">${l.educacao.pdf ? "PDF ok" : "Pendente"}</span><div><b>RREO Anexo 8 — MDE</b><small>${esc(l.educacao.pdf || "baixar e colocar em In Put/XLSM")}</small></div></div>
+        <a class="lrf-link" href="https://www.governotransparente.com.br/gestaofiscal/documentos/45079490" target="_blank" rel="noopener">Consultar documentos oficiais ↗</a>
+      </div>`;
+    }
+
+    renderLrfPending("lrf-saude", l.saude, 15, "12");
+    renderLrfPending("lrf-educacao", l.educacao, 25, "8");
+    renderLrfChart();
+  }
+
+  function renderLrfChart() {
+    const el = document.getElementById("lrf-chart");
+    if (!el) return;
+    const p = state.lrf?.pessoal;
+    if (!p?.disponivel) { el.innerHTML = `<p class="nota">Sem série mensal de LRF para este exercício.</p>`; return; }
+    const rcl = p.rcl_mensal || [];
+    const pes = p.pessoal_mensal || [];
+    const n = Math.max(rcl.length, pes.length);
+    if (!n) { el.innerHTML = `<p class="nota">Sem série mensal de LRF.</p>`; return; }
+    const W = 900, H = 300, M = { l: 50, r: 12, t: 14, b: 30 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const max = niceMax(Math.max(...rcl, ...pes, 1));
+    const y = (v) => M.t + ih - (v / max) * ih;
+    const slot = iw / n;
+    let grid = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = (max / 4) * i;
+      const yy = y(v);
+      grid += `<line x1="${M.l}" y1="${yy.toFixed(1)}" x2="${W - M.r}" y2="${yy.toFixed(1)}" stroke="#eef2f7" stroke-width="1"/>`;
+      grid += `<text x="${M.l - 8}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#7f8ea3">${tickBRL(v)}</text>`;
+    }
+    const line = (arr, color, label) => {
+      const pts = arr.map((v, i) => `${(M.l + slot * i + slot / 2).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const dots = arr.map((v, i) => `<circle cx="${(M.l + slot * i + slot / 2).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${color}" stroke="#fff" stroke-width="1.4"><title>${esc(MESES[i] || "")} · ${label} ${money(v)}</title></circle>`).join("");
+      return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>${dots}`;
+    };
+    let labels = "";
+    for (let i = 0; i < n; i++) {
+      labels += `<text x="${(M.l + slot * i + slot / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#7f8ea3">${esc(MESES[i] || "")}</text>`;
+    }
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="RCL e despesa com pessoal mês a mês">
+      ${grid}${line(rcl, "#0ea5e9", "RCL")}${line(pes, "#1d4ed8", "Pessoal")}${labels}
+      <line x1="${M.l}" y1="${M.t + ih}" x2="${W - M.r}" y2="${M.t + ih}" stroke="#dbe3ee" stroke-width="1"></line>
+    </svg>`;
   }
 
   function avisarSemFonte(id, disponivel, texto) {
@@ -1933,6 +2087,7 @@
     if (id === "contratos") renderContratos();
     if (id === "alugueis") renderAlugueis();
     if (id === "cfem") renderCfem();
+    if (id === "lrf") renderLrf();
   }
 
   function resetEstadoAno() {
@@ -1941,7 +2096,7 @@
       conferencia: null, sobre: null, unidade: null, detalhes: {},
       empenhos: {}, empResumo: null, empFiltrados: [],
       fornecedores: null, fornFiltrados: [], licitacoes: null,
-      contratos: null, alugueis: null, receitas: null, recFiltrados: [],
+      contratos: null, alugueis: null, receitas: null, lrf: null, recFiltrados: [],
       cfem: null, cfemFiltrados: [], licFiltrados: [], conFiltrados: [],
       alugFiltrados: [],
     });
@@ -1997,14 +2152,14 @@
     state.ano = Number(ano);
     resetEstadoAno();
     const meta = await json("meta");
-    const [panorama, despesas, gastos, receitas, alugueis, cfem, conferencia, sobre] = await Promise.all([
+    const [panorama, despesas, gastos, receitas, lrf, alugueis, cfem, conferencia, sobre] = await Promise.all([
       json("panorama"), json("despesas"), json("gastos"), json("receitas"),
-      json("alugueis"), json("cfem"), json("conferencia"), json("sobre"),
+      json("lrf"), json("alugueis"), json("cfem"), json("conferencia"), json("sobre"),
     ]);
     if (req !== state.anoReq) return;
     Object.assign(state, {
       meta, panorama, despesas, gastos: gastos.gastos || gastos,
-      receitas, alugueis, cfem, conferencia, sobre,
+      receitas, lrf, alugueis, cfem, conferencia, sobre,
     });
     aplicarAnoUi();
     renderPanorama();
